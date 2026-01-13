@@ -1,0 +1,371 @@
+//
+//  PropertyCard.swift
+//  Dock
+//
+//  Property card for home screen list
+//
+
+import SwiftUI
+
+struct PropertyCard: View {
+    let property: Property
+    let onPin: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var showingActions: Bool = false
+    
+    private var metrics: DealMetrics {
+        property.metrics
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with image/placeholder
+            ZStack(alignment: .topTrailing) {
+                propertyImage
+                
+                HStack(spacing: 8) {
+                    // Pin indicator
+                    if property.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(6)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                    }
+                    
+                    // Score badge
+                    ScoreMiniBadge(
+                        score: metrics.overallScore,
+                        recommendation: metrics.recommendation
+                    )
+                }
+                .padding(8)
+            }
+            
+            // Content
+            VStack(alignment: .leading, spacing: 12) {
+                // Address
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(property.address)
+                        .font(.headline)
+                        .lineLimit(1)
+                    
+                    Text("\(property.city), \(property.state) \(property.zipCode)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                // Quick stats
+                HStack(spacing: 12) {
+                    StatPill(icon: "bed.double.fill", value: "\(property.bedrooms)")
+                    StatPill(icon: "shower.fill", value: String(format: "%.1f", property.bathrooms))
+                    StatPill(icon: "square.fill", value: property.squareFeet.withCommas)
+                }
+                
+                Divider()
+                
+                // Key metrics
+                HStack {
+                    MetricPill(title: "Price", value: property.askingPrice.asCompactCurrency)
+                    Spacer()
+                    MetricPill(
+                        title: "Cap Rate",
+                        value: metrics.dealEconomics.inPlaceCapRate.asPercent(),
+                        color: scoreColor(metrics.dealEconomics.inPlaceCapRate, target: property.thresholds.targetCapRate, higherIsBetter: true)
+                    )
+                    Spacer()
+                    MetricPill(
+                        title: "CoC",
+                        value: metrics.dealEconomics.cashOnCashReturn.asPercent(),
+                        color: scoreColor(metrics.dealEconomics.cashOnCashReturn, target: property.thresholds.targetCashOnCash, higherIsBetter: true)
+                    )
+                }
+                
+                // Cash flow
+                HStack {
+                    Text("Monthly Cash Flow")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(metrics.dealEconomics.monthlyCashFlow.asCurrency)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(metrics.dealEconomics.monthlyCashFlow >= 0 ? .green : .red)
+                }
+            }
+            .padding(12)
+        }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        .contextMenu {
+            Button {
+                onPin()
+            } label: {
+                Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var propertyImage: some View {
+        if let photoData = property.primaryPhotoData,
+           let uiImage = UIImage(data: photoData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(16/9, contentMode: .fill)
+                .frame(height: 120)
+                .clipped()
+        } else if let firstURL = property.photoURLs.first,
+                  let url = URL(string: firstURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(16/9, contentMode: .fill)
+                case .failure:
+                    placeholderImage
+                case .empty:
+                    placeholderImage
+                        .overlay {
+                            ProgressView()
+                        }
+                @unknown default:
+                    placeholderImage
+                }
+            }
+            .frame(height: 120)
+            .clipped()
+        } else {
+            placeholderImage
+        }
+    }
+    
+    private var placeholderImage: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color(.systemGray5), Color(.systemGray4)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(height: 120)
+            .overlay {
+                Image(systemName: property.propertyType.icon)
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+            }
+    }
+    
+    private func scoreColor(_ value: Double, target: Double, higherIsBetter: Bool) -> Color {
+        if higherIsBetter {
+            if value >= target * 1.1 { return .green }
+            if value >= target { return .green.opacity(0.7) }
+            if value >= target * 0.85 { return .yellow }
+            return .red
+        } else {
+            if value <= target * 0.9 { return .green }
+            if value <= target { return .green.opacity(0.7) }
+            if value <= target * 1.15 { return .yellow }
+            return .red
+        }
+    }
+}
+
+// MARK: - Supporting Views
+
+struct StatPill: View {
+    let icon: String
+    let value: String
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            
+            Text(value)
+                .font(.caption)
+                .foregroundStyle(.primary)
+        }
+    }
+}
+
+struct MetricPill: View {
+    let title: String
+    let value: String
+    var color: Color = .primary
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            
+            Text(value)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(color)
+        }
+    }
+}
+
+struct ScoreMiniBadge: View {
+    let score: Double
+    let recommendation: InvestmentRecommendation
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: recommendation.icon)
+                .font(.caption2)
+            
+            Text("\(Int(score))")
+                .font(.system(.caption, design: .rounded, weight: .bold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(recommendation.color)
+        .clipShape(Capsule())
+    }
+}
+
+// MARK: - Compact Card
+
+struct PropertyCompactCard: View {
+    let property: Property
+    
+    private var metrics: DealMetrics {
+        property.metrics
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(.systemGray5))
+                .frame(width: 60, height: 60)
+                .overlay {
+                    if let photoData = property.primaryPhotoData,
+                       let uiImage = UIImage(data: photoData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    } else {
+                        Image(systemName: property.propertyType.icon)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            
+            // Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(property.address)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                
+                Text("\(property.city), \(property.state)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                HStack(spacing: 8) {
+                    Text(property.askingPrice.asCompactCurrency)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    
+                    Text("•")
+                        .foregroundStyle(.tertiary)
+                    
+                    Text("\(metrics.dealEconomics.cashOnCashReturn.asPercent) CoC")
+                        .font(.caption)
+                        .foregroundStyle(metrics.dealEconomics.cashOnCashReturn >= property.thresholds.targetCashOnCash ? .green : .secondary)
+                }
+            }
+            
+            Spacer()
+            
+            // Score
+            VStack(spacing: 2) {
+                Text("\(Int(metrics.overallScore))")
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .foregroundStyle(metrics.recommendation.color)
+                
+                Image(systemName: metrics.recommendation.icon)
+                    .font(.caption2)
+                    .foregroundStyle(metrics.recommendation.color)
+            }
+            
+            if property.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Property Card") {
+    ScrollView {
+        VStack(spacing: 16) {
+            PropertyCard(
+                property: .preview,
+                onPin: {},
+                onDelete: {}
+            )
+            
+            PropertyCompactCard(property: .preview)
+        }
+        .padding()
+    }
+    .background(Color(.systemGroupedBackground))
+}
+
+// MARK: - Preview Helper
+
+extension Property {
+    static var preview: Property {
+        Property(
+            address: "123 Investment Lane",
+            city: "Austin",
+            state: "TX",
+            zipCode: "78701",
+            askingPrice: 450000,
+            bedrooms: 3,
+            bathrooms: 2,
+            squareFeet: 1800,
+            lotSize: 6500,
+            yearBuilt: 1985,
+            propertyType: .singleFamily,
+            taxAssessedValue: 380000,
+            annualTaxes: 8500,
+            estimatedRentPerUnit: 2400,
+            estimatedTotalRent: 2400,
+            financing: FinancingInputs(
+                purchasePrice: 450000,
+                loanAmount: 337500,
+                interestRate: 0.07,
+                loanTermYears: 30,
+                ltv: 0.75,
+                closingCosts: 12000
+            )
+        )
+    }
+}

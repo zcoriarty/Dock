@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>DockAPI</key>
+	<dict>
+		<key>BaseURL</key>
+		<string>https://dock-api-production.up.railway.app</string>
+	</dict>
+	<key>FredAPI</key>
+	<dict>
+		<key>APIKey</key>
+		<string>b5c78d690e4ba9737e43b1bf0116ab12</string>
+		<key>BaseURL</key>
+		<string>https://api.stlouisfed.org/fred</string>
+	</dict>
+	<key>Census</key>
+	<dict>
+		<key>APIKey</key>
+		<string>cb3cde04e5694514111b239381f696f116640490</string>
+		<key>BaseURL</key>
+		<string>https://api.census.gov/data</string>
+	</dict>
+</dict>
+</plist>
