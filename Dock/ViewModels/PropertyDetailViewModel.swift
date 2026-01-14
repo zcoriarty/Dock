@@ -89,10 +89,27 @@ final class PropertyDetailViewModel {
         async let rentTask: () = fetchRentEstimate()
         async let marketTask: () = fetchMarketData()
         async let insuranceTask: () = fetchInsuranceEstimate()
+        async let photoTask: () = fetchPrimaryPhotoIfNeeded()
         
-        _ = await (ratesTask, rentTask, marketTask, insuranceTask)
+        _ = await (ratesTask, rentTask, marketTask, insuranceTask, photoTask)
         
         HapticManager.shared.success()
+    }
+    
+    private func fetchPrimaryPhotoIfNeeded() async {
+        // Skip if we already have a photo
+        guard property.primaryPhotoData == nil else { return }
+        
+        // Try to get photo from photoURLs if available
+        if let firstPhotoURL = property.photoURLs.first,
+           let imageURL = URL(string: firstPhotoURL) {
+            do {
+                let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
+                property.primaryPhotoData = imageData
+            } catch {
+                // Ignore photo download errors
+            }
+        }
     }
     
     func fetchFromListingURL(_ url: String) async {
@@ -108,7 +125,7 @@ final class PropertyDetailViewModel {
             let propertyData = try await propertyService.fetchProperty(from: url)
             
             // Update property with fetched data
-            property.listingURL = url
+            property.listingURL = propertyData.listingURL ?? url
             property.address = propertyData.address
             property.city = propertyData.city
             property.state = propertyData.state
@@ -125,6 +142,17 @@ final class PropertyDetailViewModel {
             property.taxAssessedValue = propertyData.taxAssessedValue
             property.annualTaxes = propertyData.annualTaxes
             property.photoURLs = propertyData.photoURLs
+            
+            // Download primary photo if available
+            if let primaryPhotoURL = propertyData.primaryPhotoURL,
+               let imageURL = URL(string: primaryPhotoURL) {
+                do {
+                    let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
+                    property.primaryPhotoData = imageData
+                } catch {
+                    // Ignore photo download errors
+                }
+            }
             
             // Update financing
             property.financing.purchasePrice = propertyData.askingPrice

@@ -19,88 +19,63 @@ struct PropertyCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header with image/placeholder
-            ZStack(alignment: .topTrailing) {
-                propertyImage
-                
-                HStack(spacing: 8) {
-                    // Pin indicator
-                    if property.isPinned {
-                        Image(systemName: "pin.fill")
+        HStack(spacing: 12) {
+            // Image on left
+            propertyImage
+                .frame(width: 100, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            
+            // Content on right
+            VStack(alignment: .leading, spacing: 6) {
+                // Address and score
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(property.address)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                        
+                        Text("\(property.city), \(property.state) \(property.zipCode)")
                             .font(.caption)
-                            .foregroundStyle(.white)
-                            .padding(6)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
+                            .foregroundStyle(.secondary)
                     }
                     
-                    // Score badge
-                    ScoreMiniBadge(
-                        score: metrics.overallScore,
-                        recommendation: metrics.recommendation
-                    )
-                }
-                .padding(8)
-            }
-            
-            // Content
-            VStack(alignment: .leading, spacing: 12) {
-                // Address
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(property.address)
-                        .font(.headline)
-                        .lineLimit(1)
+                    Spacer()
                     
-                    Text("\(property.city), \(property.state) \(property.zipCode)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        if property.isPinned {
+                            Image(systemName: "pin.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+                        
+                        ScoreMiniBadge(
+                            score: metrics.overallScore,
+                            recommendation: metrics.recommendation
+                        )
+                    }
                 }
                 
                 // Quick stats
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     StatPill(icon: "bed.double.fill", value: "\(property.bedrooms)")
                     StatPill(icon: "shower.fill", value: String(format: "%.1f", property.bathrooms))
                     StatPill(icon: "square.fill", value: property.squareFeet.withCommas)
                 }
                 
-                Divider()
-                
-                // Key metrics
-                HStack {
+                // Key metrics row
+                HStack(spacing: 16) {
                     MetricPill(title: "Price", value: property.askingPrice.asCompactCurrency)
-                    Spacer()
-                    MetricPill(
-                        title: "Cap Rate",
-                        value: metrics.dealEconomics.inPlaceCapRate.asPercent(),
-                        color: scoreColor(metrics.dealEconomics.inPlaceCapRate, target: property.thresholds.targetCapRate, higherIsBetter: true)
-                    )
-                    Spacer()
-                    MetricPill(
-                        title: "CoC",
-                        value: metrics.dealEconomics.cashOnCashReturn.asPercent(),
-                        color: scoreColor(metrics.dealEconomics.cashOnCashReturn, target: property.thresholds.targetCashOnCash, higherIsBetter: true)
-                    )
-                }
-                
-                // Cash flow
-                HStack {
-                    Text("Monthly Cash Flow")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
-                    Spacer()
-                    
-                    Text(metrics.dealEconomics.monthlyCashFlow.asCurrency)
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(metrics.dealEconomics.monthlyCashFlow >= 0 ? .green : .red)
+                    MetricPill(title: "Cap", value: metrics.dealEconomics.inPlaceCapRate.asPercent())
+                    MetricPill(title: "CoC", value: metrics.dealEconomics.cashOnCashReturn.asPercent())
+                    MetricPill(title: "CF/mo", value: metrics.dealEconomics.monthlyCashFlow.asCompactCurrency)
                 }
             }
-            .padding(12)
         }
+        .padding(10)
         .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
         .contextMenu {
             Button {
                 onPin()
@@ -124,9 +99,7 @@ struct PropertyCard: View {
            let uiImage = UIImage(data: photoData) {
             Image(uiImage: uiImage)
                 .resizable()
-                .aspectRatio(16/9, contentMode: .fill)
-                .frame(height: 120)
-                .clipped()
+                .aspectRatio(contentMode: .fill)
         } else if let firstURL = property.photoURLs.first,
                   let url = URL(string: firstURL) {
             AsyncImage(url: url) { phase in
@@ -134,20 +107,19 @@ struct PropertyCard: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .aspectRatio(16/9, contentMode: .fill)
+                        .aspectRatio(contentMode: .fill)
                 case .failure:
                     placeholderImage
                 case .empty:
                     placeholderImage
                         .overlay {
                             ProgressView()
+                                .scaleEffect(0.8)
                         }
                 @unknown default:
                     placeholderImage
                 }
             }
-            .frame(height: 120)
-            .clipped()
         } else {
             placeholderImage
         }
@@ -162,47 +134,16 @@ struct PropertyCard: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(height: 120)
             .overlay {
                 Image(systemName: property.propertyType.icon)
-                    .font(.largeTitle)
+                    .font(.title2)
                     .foregroundStyle(.tertiary)
             }
-    }
-    
-    private func scoreColor(_ value: Double, target: Double, higherIsBetter: Bool) -> Color {
-        if higherIsBetter {
-            if value >= target * 1.1 { return .green }
-            if value >= target { return .green.opacity(0.7) }
-            if value >= target * 0.85 { return .yellow }
-            return .red
-        } else {
-            if value <= target * 0.9 { return .green }
-            if value <= target { return .green.opacity(0.7) }
-            if value <= target * 1.15 { return .yellow }
-            return .red
-        }
     }
 }
 
 // MARK: - Supporting Views
 
-struct StatPill: View {
-    let icon: String
-    let value: String
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            
-            Text(value)
-                .font(.caption)
-                .foregroundStyle(.primary)
-        }
-    }
-}
 
 struct MetricPill: View {
     let title: String

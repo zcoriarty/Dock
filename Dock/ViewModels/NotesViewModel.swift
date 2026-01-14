@@ -16,7 +16,9 @@ final class NotesViewModel {
     // MARK: - Properties
     
     var notes: [PropertyNote] = []
+    var availableTags: [NoteTag] = []
     var selectedArea: PropertyArea?
+    var selectedTagFilter: UUID?
     var isLoading: Bool = false
     var errorMessage: String?
     var showingCamera: Bool = false
@@ -47,10 +49,19 @@ final class NotesViewModel {
     }
     
     var filteredNotes: [PropertyNote] {
+        var result = notes
+        
+        // Filter by area
         if let area = selectedArea {
-            return notes.filter { $0.areaName == area.rawValue }
+            result = result.filter { $0.areaName == area.rawValue }
         }
-        return notes.sorted { $0.createdAt > $1.createdAt }
+        
+        // Filter by tag
+        if let tagID = selectedTagFilter {
+            result = result.filter { $0.tagIDs.contains(tagID) }
+        }
+        
+        return result.sorted { $0.createdAt > $1.createdAt }
     }
     
     var totalMediaCount: Int {
@@ -60,14 +71,55 @@ final class NotesViewModel {
     // MARK: - Dependencies
     
     private let viewContext: NSManagedObjectContext
+    private let tagsKey = "app.dock.noteTags"
     
     // MARK: - Init
     
     init(propertyID: UUID, context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
         self.propertyID = propertyID
         self.viewContext = context
+        loadTags()
         Task {
             await loadNotes()
+        }
+    }
+    
+    // MARK: - Tag Management
+    
+    func loadTags() {
+        if let data = UserDefaults.standard.data(forKey: tagsKey),
+           let tags = try? JSONDecoder().decode([NoteTag].self, from: data) {
+            availableTags = tags.sorted { $0.name < $1.name }
+        }
+    }
+    
+    func saveTags() {
+        if let data = try? JSONEncoder().encode(availableTags) {
+            UserDefaults.standard.set(data, forKey: tagsKey)
+        }
+    }
+    
+    func createTag(name: String, colorHex: String) async {
+        let tag = NoteTag(name: name, colorHex: colorHex)
+        availableTags.append(tag)
+        availableTags.sort { $0.name < $1.name }
+        saveTags()
+        HapticManager.shared.success()
+    }
+    
+    func deleteTag(_ tag: NoteTag) async {
+        availableTags.removeAll { $0.id == tag.id }
+        saveTags()
+        
+        // Remove tag from all notes that have it
+        for i in notes.indices {
+            notes[i].tagIDs.removeAll { $0 == tag.id }
+        }
+    }
+    
+    func tags(for note: PropertyNote) -> [NoteTag] {
+        note.tagIDs.compactMap { tagID in
+            availableTags.first { $0.id == tagID }
         }
     }
     
@@ -91,11 +143,12 @@ final class NotesViewModel {
     
     // MARK: - Note CRUD
     
-    func addNote(area: PropertyArea?, content: String) async {
+    func addNote(area: PropertyArea?, content: String, tagIDs: [UUID] = []) async {
         let note = PropertyNote(
             areaName: area?.rawValue ?? "",
             content: content,
-            sortOrder: notes.count
+            sortOrder: notes.count,
+            tagIDs: tagIDs
         )
         
         let entity = NoteEntity(context: viewContext)
@@ -214,14 +267,21 @@ final class NotesViewModel {
     }
     
     private func mapEntityToNote(_ entity: NoteEntity) -> PropertyNote {
-        PropertyNote(
+        // Parse tagIDs from stored string
+        var tagIDs: [UUID] = []
+        if let tagIDsString = entity.tagIDs {
+            tagIDs = tagIDsString.components(separatedBy: ",").compactMap { UUID(uuidString: $0) }
+        }
+        
+        return PropertyNote(
             id: entity.id ?? UUID(),
             createdAt: entity.createdAt ?? Date(),
             updatedAt: entity.updatedAt ?? Date(),
             areaName: entity.areaName ?? "",
             content: entity.content ?? "",
             sortOrder: Int(entity.sortOrder),
-            media: mapMediaEntities(entity.media as? Set<MediaEntity>)
+            media: mapMediaEntities(entity.media as? Set<MediaEntity>),
+            tagIDs: tagIDs
         )
     }
     
@@ -232,6 +292,8 @@ final class NotesViewModel {
         entity.areaName = note.areaName
         entity.content = note.content
         entity.sortOrder = Int16(note.sortOrder)
+        // Store tagIDs as comma-separated string
+        entity.tagIDs = note.tagIDs.map { $0.uuidString }.joined(separator: ",")
     }
     
     private func mapMediaEntities(_ entities: Set<MediaEntity>?) -> [NoteMedia] {

@@ -7,12 +7,36 @@
 
 import SwiftUI
 
+// MARK: - Shared Input Style
+
+private struct InputFieldStyle: ViewModifier {
+    let isFocused: Bool
+    
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isFocused ? Color.accentColor : Color(.separator), lineWidth: isFocused ? 1.5 : 0.5)
+            }
+    }
+}
+
+extension View {
+    func inputFieldStyle(isFocused: Bool) -> some View {
+        modifier(InputFieldStyle(isFocused: isFocused))
+    }
+}
+
 // MARK: - Currency Field
 
 struct CurrencyField: View {
     let title: String
     @Binding var value: Double
-    var placeholder: String = "$0"
+    var placeholder: String = "0"
     
     @FocusState private var isFocused: Bool
     @State private var textValue: String = ""
@@ -25,7 +49,7 @@ struct CurrencyField: View {
             
             HStack {
                 Text("$")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                 
                 TextField(placeholder, text: $textValue)
                     .keyboardType(.numberPad)
@@ -43,13 +67,7 @@ struct CurrencyField: View {
                         }
                     }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isFocused ? Color.accentColor : .clear, lineWidth: 2)
-            }
+            .inputFieldStyle(isFocused: isFocused)
         }
         .onAppear {
             textValue = value > 0 ? String(Int(value)) : ""
@@ -94,15 +112,9 @@ struct PercentField: View {
                     }
                 
                 Text("%")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
             }
-            .padding(12)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isFocused ? Color.accentColor : .clear, lineWidth: 2)
-            }
+            .inputFieldStyle(isFocused: isFocused)
         }
         .onAppear {
             textValue = value > 0 ? String(format: "%.\(decimalPlaces)f", value * 100) : ""
@@ -145,16 +157,10 @@ struct NumberField: View {
                 
                 if let suffix = suffix {
                     Text(suffix)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isFocused ? Color.accentColor : .clear, lineWidth: 2)
-            }
+            .inputFieldStyle(isFocused: isFocused)
         }
         .onAppear {
             textValue = value > 0 ? String(value) : ""
@@ -181,7 +187,7 @@ struct TextInputField: View {
             HStack {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
                 
                 TextField(placeholder, text: $text)
@@ -194,13 +200,7 @@ struct TextInputField: View {
                         }
                     }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isFocused ? Color.accentColor : .clear, lineWidth: 2)
-            }
+            .inputFieldStyle(isFocused: isFocused)
         }
     }
 }
@@ -215,6 +215,16 @@ struct URLInputField: View {
     
     @FocusState private var isFocused: Bool
     
+    private var borderColor: Color {
+        if isFocused {
+            return .accentColor
+        } else if url.isEmpty {
+            return Color(.separator)
+        } else {
+            return isValid ? Color.green.opacity(0.6) : Color.red.opacity(0.6)
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
@@ -223,7 +233,7 @@ struct URLInputField: View {
             
             HStack {
                 Image(systemName: "link")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                 
                 TextField(placeholder, text: $url)
                     .keyboardType(.URL)
@@ -237,12 +247,13 @@ struct URLInputField: View {
                         .foregroundStyle(isValid ? .green : .red)
                 }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isFocused ? Color.accentColor : (url.isEmpty ? .clear : (isValid ? Color.green.opacity(0.5) : Color.red.opacity(0.5))), lineWidth: 2)
+                    .stroke(borderColor, lineWidth: isFocused || (!url.isEmpty && !isValid) ? 1.5 : 0.5)
             }
         }
     }
@@ -273,7 +284,7 @@ struct StepperField: View {
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(value > range.lowerBound ? .primary : .tertiary)
+                        .foregroundColor(value > range.lowerBound ? .accentColor : Color(.tertiaryLabel))
                 }
                 .disabled(value <= range.lowerBound)
                 
@@ -295,13 +306,18 @@ struct StepperField: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(value < range.upperBound ? .primary : .tertiary)
+                        .foregroundColor(value < range.upperBound ? .accentColor : Color(.tertiaryLabel))
                 }
                 .disabled(value >= range.upperBound)
             }
-            .padding(12)
-            .background(Color(.systemGray6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color(.separator), lineWidth: 0.5)
+            }
         }
     }
 }
@@ -357,9 +373,14 @@ struct SliderField: View {
             }
             .tint(.accentColor)
         }
-        .padding(12)
-        .background(Color(.systemGray6))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color(.separator), lineWidth: 0.5)
+        }
     }
 }
 

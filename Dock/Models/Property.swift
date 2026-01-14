@@ -163,6 +163,16 @@ struct Property: Identifiable, Hashable, Sendable {
     var listingSource: String? {
         listingURL?.listingSource
     }
+    
+    /// URL to view the property listing - uses stored URL or generates Zillow search
+    var viewableListingURL: URL? {
+        if let listingURL = listingURL, let url = URL(string: listingURL) {
+            return url
+        }
+        // Fallback: generate a Zillow search URL from the address
+        let searchQuery = fullAddress.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return URL(string: "https://www.zillow.com/homes/\(searchQuery)_rb/")
+    }
 }
 
 // MARK: - Property Type

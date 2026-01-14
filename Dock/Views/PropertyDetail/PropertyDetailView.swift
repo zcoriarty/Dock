@@ -10,9 +10,19 @@ import SwiftUI
 struct PropertyDetailView: View {
     @State private var viewModel: PropertyDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     
     init(property: Property, onSave: @escaping (Property) async -> Void) {
         _viewModel = State(initialValue: PropertyDetailViewModel(property: property, onSave: onSave))
+    }
+    
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
     }
     
     var body: some View {
@@ -21,29 +31,30 @@ struct PropertyDetailView: View {
                 // Header
                 propertyHeader
                 
-                // Section picker
-                sectionPicker
-                    .padding(.top)
-                
                 // Content based on section
-                Group {
-                    switch viewModel.activeSection {
-                    case .summary:
-                        summarySection
-                    case .economics:
-                        economicsSection
-                    case .market:
-                        marketSection
-                    case .risk:
-                        riskSection
-                    case .notes:
-                        notesSection
+                VStack(spacing: 24) {
+                    sectionPicker
+                    
+                    Group {
+                        switch viewModel.activeSection {
+                        case .summary:
+                            summarySection
+                        case .economics:
+                            economicsSection
+                        case .market:
+                            marketSection
+                        case .risk:
+                            riskSection
+                        case .notes:
+                            notesSection
+                        }
                     }
                 }
-                .padding(.top)
+                .padding(.top, 24)
+                .padding(.bottom, 40)
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(backgroundColor.ignoresSafeArea())
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -60,7 +71,7 @@ struct PropertyDetailView: View {
                     Button {
                         viewModel.showingFinancing = true
                     } label: {
-                        Label("Edit Financing", systemImage: "banknote")
+                        Label("Edit Financing", systemImage: "slider.horizontal.3")
                     }
                     
                     Divider()
@@ -74,6 +85,7 @@ struct PropertyDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                        .fontWeight(.medium)
                 }
             }
         }
@@ -89,77 +101,88 @@ struct PropertyDetailView: View {
     
     private var propertyHeader: some View {
         VStack(spacing: 0) {
-            // Photo
-            ZStack(alignment: .bottom) {
-                if let photoData = viewModel.property.primaryPhotoData,
-                   let uiImage = UIImage(data: photoData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 200)
-                        .clipped()
-                } else {
-                    Rectangle()
-                        .fill(LinearGradient(
-                            colors: [.gray.opacity(0.3), .gray.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(height: 200)
-                        .overlay {
-                            Image(systemName: viewModel.property.propertyType.icon)
-                                .font(.system(size: 48))
-                                .foregroundStyle(.tertiary)
+            // Photo - only show if we have one
+            if let photoData = viewModel.property.primaryPhotoData,
+               let uiImage = UIImage(data: photoData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 220)
+                    .clipped()
+            }
+            
+            // Property info
+            VStack(alignment: .leading, spacing: 16) {
+                // Price and score row
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(viewModel.property.askingPrice.asCompactCurrency)
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                        
+                        Text(viewModel.property.address)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                        
+                        Text("\(viewModel.property.city), \(viewModel.property.state) \(viewModel.property.zipCode)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        
+                        // View Listing Link
+                        if let url = viewModel.property.viewableListingURL {
+                            Button {
+                                openURL(url)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up.right.square")
+                                        .font(.caption)
+                                    Text("View on \(viewModel.property.listingSource ?? "Zillow")")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundStyle(.blue)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
                         }
-                }
-                
-                // Gradient overlay
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.7)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 100)
-                
-                // Score badge
-                HStack {
-                    ScoreBadge(
-                        score: viewModel.metrics.overallScore,
-                        recommendation: viewModel.metrics.recommendation
-                    )
+                    }
                     
                     Spacer()
                     
-                    Text(viewModel.property.askingPrice.asCompactCurrency)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
+                    // Score circle
+                    ModernScoreBadge(
+                        score: viewModel.metrics.overallScore,
+                        recommendation: viewModel.metrics.recommendation
+                    )
                 }
-                .padding()
-            }
-            
-            // Address
-            VStack(alignment: .leading, spacing: 8) {
-                Text(viewModel.property.address)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                
-                Text("\(viewModel.property.city), \(viewModel.property.state) \(viewModel.property.zipCode)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 
                 // Quick stats
-                HStack(spacing: 16) {
-                    StatPill(icon: "bed.double.fill", value: "\(viewModel.property.bedrooms) bed")
-                    StatPill(icon: "shower.fill", value: String(format: "%.1f bath", viewModel.property.bathrooms))
-                    StatPill(icon: "square.fill", value: "\(viewModel.property.squareFeet.withCommas) sqft")
-                    StatPill(icon: "calendar", value: "\(viewModel.property.yearBuilt)")
+                HStack(spacing: 0) {
+                    QuickStat(value: "\(viewModel.property.bedrooms)", label: "Beds")
+                    
+                    Divider()
+                        .frame(height: 32)
+                        .padding(.horizontal, 16)
+                    
+                    QuickStat(value: String(format: "%.1f", viewModel.property.bathrooms), label: "Baths")
+                    
+                    Divider()
+                        .frame(height: 32)
+                        .padding(.horizontal, 16)
+                    
+                    QuickStat(value: viewModel.property.squareFeet.withCommas, label: "Sq Ft")
+                    
+                    Divider()
+                        .frame(height: 32)
+                        .padding(.horizontal, 16)
+                    
+                    QuickStat(value: "\(viewModel.property.yearBuilt)", label: "Built")
+                    
+                    Spacer()
                 }
-                .font(.caption)
+                .padding(.top, 8)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.systemBackground))
+            .padding(20)
+            .background(backgroundColor)
         }
     }
     
@@ -177,226 +200,212 @@ struct PropertyDetailView: View {
                             HapticManager.shared.selection()
                         }
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: section.icon)
-                                .font(.caption)
-                            
-                            Text(section.rawValue)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            viewModel.activeSection == section
-                            ? Color.accentColor
-                            : Color(.systemGray5)
-                        )
-                        .foregroundStyle(
-                            viewModel.activeSection == section
-                            ? .white
-                            : .primary
-                        )
-                        .clipShape(Capsule())
+                        Text(section.rawValue)
+                            .font(.subheadline)
+                            .fontWeight(viewModel.activeSection == section ? .semibold : .regular)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                viewModel.activeSection == section
+                                ? Color.primary
+                                : Color.clear
+                            )
+                            .foregroundStyle(
+                                viewModel.activeSection == section
+                                ? (colorScheme == .dark ? Color.black : Color.white)
+                                : .primary
+                            )
+                            .clipShape(Capsule())
+                            .overlay {
+                                if viewModel.activeSection != section {
+                                    Capsule()
+                                        .stroke(Color.primary.opacity(0.15), lineWidth: 1)
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
+                    .padding(.vertical, 2)
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
         }
     }
     
     // MARK: - Summary Section
     
     private var summarySection: some View {
-        VStack(spacing: 16) {
-            // Key metrics
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                LargeMetricCard(
+        VStack(spacing: 20) {
+            // Hero metrics
+            HStack(spacing: 12) {
+                HeroMetricCard(
                     title: "Monthly Cash Flow",
                     value: viewModel.metrics.dealEconomics.monthlyCashFlow.asCurrency,
-                    trend: viewModel.metrics.dealEconomics.monthlyCashFlow >= 0 ? .up : .down,
-                    trendValue: nil,
-                    color: viewModel.metrics.dealEconomics.monthlyCashFlow >= 0 ? .green : .red
+                    isPositive: viewModel.metrics.dealEconomics.monthlyCashFlow >= 0,
+                    background: cardBackground
                 )
                 
-                LargeMetricCard(
+                HeroMetricCard(
                     title: "Cap Rate",
                     value: viewModel.metrics.dealEconomics.inPlaceCapRate.asPercent(),
-                    trend: nil,
-                    trendValue: nil,
-                    color: viewModel.metrics.dealEconomics.inPlaceCapRate >= viewModel.property.thresholds.targetCapRate ? .green : .orange
+                    isPositive: viewModel.metrics.dealEconomics.inPlaceCapRate >= viewModel.property.thresholds.targetCapRate,
+                    background: cardBackground
                 )
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
             
-            // All scored metrics
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Metrics Scorecard")
+            // Metrics list
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Performance")
                     .font(.headline)
-                    .padding(.horizontal)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 20)
                 
                 VStack(spacing: 0) {
-                    ForEach(viewModel.metrics.scoredMetrics) { metric in
-                        MetricRow(metric: metric)
-                            .padding(.horizontal)
+                    ForEach(Array(viewModel.metrics.scoredMetrics.enumerated()), id: \.element.id) { index, metric in
+                        ModernMetricRow(metric: metric)
                         
-                        if metric.id != viewModel.metrics.scoredMetrics.last?.id {
+                        if index < viewModel.metrics.scoredMetrics.count - 1 {
                             Divider()
-                                .padding(.leading)
+                                .padding(.leading, 20)
                         }
                     }
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 20)
             }
             
             // Recommendation
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Recommendation")
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Analysis")
                     .font(.headline)
-                    .padding(.horizontal)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 20)
                 
-                HStack {
-                    Image(systemName: viewModel.metrics.recommendation.icon)
-                        .font(.title2)
-                        .foregroundStyle(viewModel.metrics.recommendation.color)
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(viewModel.metrics.recommendation.color)
+                        .frame(width: 48, height: 48)
+                        .overlay {
+                            Image(systemName: viewModel.metrics.recommendation.icon)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                        }
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text(viewModel.metrics.recommendation.rawValue)
                             .font(.headline)
-                            .foregroundStyle(viewModel.metrics.recommendation.color)
                         
                         Text(viewModel.metrics.recommendation.description)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                     
                     Spacer()
                 }
-                .padding()
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
+                .padding(16)
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 20)
             }
         }
-        .padding(.bottom)
     }
     
     // MARK: - Economics Section
     
     private var economicsSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
             // Income
-            VStack(alignment: .leading, spacing: 8) {
-                SectionHeader(title: "Income", icon: "arrow.up.circle.fill")
-                    .padding(.horizontal)
-                
+            ModernSection(title: "Income", background: cardBackground) {
                 VStack(spacing: 0) {
-                    EconomicsRow(title: "Gross Potential Rent", value: viewModel.metrics.dealEconomics.grossPotentialRent.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Vacancy Loss", value: "(\(viewModel.metrics.dealEconomics.vacancyLoss.asCurrency))", color: .red)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Effective Gross Income", value: viewModel.metrics.dealEconomics.effectiveGrossIncome.asCurrency, isTotal: true)
+                    ModernEconomicsRow(title: "Gross Potential Rent", value: viewModel.metrics.dealEconomics.grossPotentialRent.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Vacancy Loss", value: "-\(viewModel.metrics.dealEconomics.vacancyLoss.asCurrency)", valueColor: .red.opacity(0.8))
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Effective Gross Income", value: viewModel.metrics.dealEconomics.effectiveGrossIncome.asCurrency, isHighlighted: true)
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
             }
             
             // Expenses
-            VStack(alignment: .leading, spacing: 8) {
-                SectionHeader(title: "Operating Expenses", icon: "arrow.down.circle.fill")
-                    .padding(.horizontal)
-                
+            ModernSection(title: "Operating Expenses", background: cardBackground) {
                 VStack(spacing: 0) {
-                    EconomicsRow(title: "Property Taxes", value: viewModel.metrics.dealEconomics.expenseBreakdown.taxes.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Insurance", value: viewModel.metrics.dealEconomics.expenseBreakdown.insurance.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Management", value: viewModel.metrics.dealEconomics.expenseBreakdown.management.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Repairs/Maintenance", value: viewModel.metrics.dealEconomics.expenseBreakdown.repairs.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "CapEx Reserve", value: viewModel.metrics.dealEconomics.expenseBreakdown.capexReserve.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Other", value: viewModel.metrics.dealEconomics.expenseBreakdown.other.asCurrency)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Total Expenses", value: viewModel.metrics.dealEconomics.totalOperatingExpenses.asCurrency, isTotal: true)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Expense Ratio", value: viewModel.metrics.dealEconomics.expenseBreakdown.expenseRatio.asPercent(), isTotal: true)
+                    ModernEconomicsRow(title: "Property Taxes", value: viewModel.metrics.dealEconomics.expenseBreakdown.taxes.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Insurance", value: viewModel.metrics.dealEconomics.expenseBreakdown.insurance.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Management", value: viewModel.metrics.dealEconomics.expenseBreakdown.management.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Repairs/Maintenance", value: viewModel.metrics.dealEconomics.expenseBreakdown.repairs.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "CapEx Reserve", value: viewModel.metrics.dealEconomics.expenseBreakdown.capexReserve.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Other", value: viewModel.metrics.dealEconomics.expenseBreakdown.other.asCurrency)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Total Expenses", value: viewModel.metrics.dealEconomics.totalOperatingExpenses.asCurrency, isHighlighted: true)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Expense Ratio", value: viewModel.metrics.dealEconomics.expenseBreakdown.expenseRatio.asPercent(), isHighlighted: true)
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
             }
             
-            // NOI & Returns
-            VStack(alignment: .leading, spacing: 8) {
-                SectionHeader(title: "Returns", icon: "chart.line.uptrend.xyaxis")
-                    .padding(.horizontal)
-                
+            // Returns
+            ModernSection(title: "Returns", background: cardBackground) {
                 VStack(spacing: 0) {
-                    EconomicsRow(title: "Net Operating Income (NOI)", value: viewModel.metrics.dealEconomics.netOperatingIncome.asCurrency, isTotal: true)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Annual Debt Service", value: "(\(viewModel.metrics.dealEconomics.annualDebtService.asCurrency))")
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Annual Cash Flow", value: viewModel.metrics.dealEconomics.annualCashFlow.asCurrency, isTotal: true, color: viewModel.metrics.dealEconomics.annualCashFlow >= 0 ? .green : .red)
-                    Divider().padding(.leading)
-                    EconomicsRow(title: "Monthly Cash Flow", value: viewModel.metrics.dealEconomics.monthlyCashFlow.asCurrency, color: viewModel.metrics.dealEconomics.monthlyCashFlow >= 0 ? .green : .red)
+                    ModernEconomicsRow(title: "Net Operating Income", value: viewModel.metrics.dealEconomics.netOperatingIncome.asCurrency, isHighlighted: true)
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(title: "Annual Debt Service", value: "-\(viewModel.metrics.dealEconomics.annualDebtService.asCurrency)")
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(
+                        title: "Annual Cash Flow",
+                        value: viewModel.metrics.dealEconomics.annualCashFlow.asCurrency,
+                        valueColor: viewModel.metrics.dealEconomics.annualCashFlow >= 0 ? .green : .red,
+                        isHighlighted: true
+                    )
+                    Divider().padding(.leading, 16)
+                    ModernEconomicsRow(
+                        title: "Monthly Cash Flow",
+                        value: viewModel.metrics.dealEconomics.monthlyCashFlow.asCurrency,
+                        valueColor: viewModel.metrics.dealEconomics.monthlyCashFlow >= 0 ? .green : .red
+                    )
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
             }
             
-            // Edit rent button
+            // Edit button
             Button {
                 viewModel.showingFinancing = true
             } label: {
-                Label("Edit Assumptions", systemImage: "slider.horizontal.3")
+                Text("Edit Assumptions")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 14)
+                    .background(Color.primary)
+                    .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .buttonStyle(.bordered)
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
         }
-        .padding(.bottom)
     }
     
     // MARK: - Market Section
     
     private var marketSection: some View {
-        VStack(spacing: 16) {
-            // Market indicators
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Market Indicators")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
+        VStack(spacing: 24) {
+            ModernSection(title: "Market Indicators", background: cardBackground) {
                 VStack(spacing: 0) {
-                    MarketIndicatorRow(title: "Rent Growth", indicator: viewModel.metrics.marketSupport.rentGrowth)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
-                    MarketIndicatorRow(title: "Price Appreciation", indicator: viewModel.metrics.marketSupport.priceAppreciation)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
-                    MarketIndicatorRow(title: "Vacancy Rate", indicator: viewModel.metrics.marketSupport.vacancyTrend)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
-                    MarketIndicatorRow(title: "Days on Market", indicator: viewModel.metrics.marketSupport.daysOnMarket)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
-                    MarketIndicatorRow(title: "Housing Supply", indicator: viewModel.metrics.marketSupport.supplyTrend)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
-                    MarketIndicatorRow(title: "Demand", indicator: viewModel.metrics.marketSupport.demandIndicator)
-                        .padding(.horizontal)
+                    ModernMarketRow(title: "Rent Growth", indicator: viewModel.metrics.marketSupport.rentGrowth)
+                    Divider().padding(.leading, 16)
+                    ModernMarketRow(title: "Price Appreciation", indicator: viewModel.metrics.marketSupport.priceAppreciation)
+                    Divider().padding(.leading, 16)
+                    ModernMarketRow(title: "Vacancy Rate", indicator: viewModel.metrics.marketSupport.vacancyTrend)
+                    Divider().padding(.leading, 16)
+                    ModernMarketRow(title: "Days on Market", indicator: viewModel.metrics.marketSupport.daysOnMarket)
+                    Divider().padding(.leading, 16)
+                    ModernMarketRow(title: "Housing Supply", indicator: viewModel.metrics.marketSupport.supplyTrend)
+                    Divider().padding(.leading, 16)
+                    ModernMarketRow(title: "Demand", indicator: viewModel.metrics.marketSupport.demandIndicator)
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
             }
             
             // Refresh button
@@ -405,34 +414,39 @@ struct PropertyDetailView: View {
                     await viewModel.fetchAllData()
                 }
             } label: {
-                Label(viewModel.isFetchingData ? "Refreshing..." : "Refresh Market Data", systemImage: "arrow.clockwise")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                HStack(spacing: 8) {
+                    if viewModel.isFetchingData {
+                        ProgressView()
+                            .tint(colorScheme == .dark ? Color.black : Color.white)
+                    }
+                    Text(viewModel.isFetchingData ? "Refreshing..." : "Refresh Market Data")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.primary)
+                .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .buttonStyle(.bordered)
             .disabled(viewModel.isFetchingData)
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
         }
-        .padding(.bottom)
     }
     
     // MARK: - Risk Section
     
     private var riskSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
             // Break-even
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Break-Even Analysis")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
-                VStack(spacing: 12) {
+            ModernSection(title: "Break-Even Analysis", background: cardBackground) {
+                VStack(spacing: 16) {
                     HStack {
-                        VStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("Break-Even Occupancy")
                                 .font(.subheadline)
-                            Text("Minimum occupancy to cover expenses + debt")
-                                .font(.caption2)
+                            Text("Minimum occupancy to cover all costs")
+                                .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
                         
@@ -443,30 +457,28 @@ struct PropertyDetailView: View {
                             .foregroundStyle(viewModel.metrics.riskBuffers.breakEvenOccupancy <= 0.85 ? .green : .orange)
                     }
                     
-                    // Visual gauge
+                    // Progress bar
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemGray5))
+                                .fill(Color.primary.opacity(0.1))
                             
                             RoundedRectangle(cornerRadius: 4)
                                 .fill(viewModel.metrics.riskBuffers.breakEvenOccupancy <= 0.85 ? Color.green : Color.orange)
                                 .frame(width: geo.size.width * min(viewModel.metrics.riskBuffers.breakEvenOccupancy, 1.0))
                         }
                     }
-                    .frame(height: 8)
+                    .frame(height: 6)
                 }
-                .padding()
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
+                .padding(16)
             }
             
             // Sensitivity
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Sensitivity Analysis")
                         .font(.headline)
+                        .fontWeight(.semibold)
                     
                     Spacer()
                     
@@ -475,36 +487,38 @@ struct PropertyDetailView: View {
                     } label: {
                         Text("Details")
                             .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 20)
                 
                 VStack(spacing: 0) {
                     SensitivityRow(result: viewModel.metrics.riskBuffers.sensitivityAnalysis.rentUp10, baseValue: viewModel.metrics.dealEconomics.annualCashFlow)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    Divider().padding(.leading, 16)
                     SensitivityRow(result: viewModel.metrics.riskBuffers.sensitivityAnalysis.rentDown10, baseValue: viewModel.metrics.dealEconomics.annualCashFlow)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    Divider().padding(.leading, 16)
                     SensitivityRow(result: viewModel.metrics.riskBuffers.sensitivityAnalysis.rateUp1, baseValue: viewModel.metrics.dealEconomics.annualCashFlow)
-                        .padding(.horizontal)
-                    Divider().padding(.leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    Divider().padding(.leading, 16)
                     SensitivityRow(result: viewModel.metrics.riskBuffers.sensitivityAnalysis.rateDown1, baseValue: viewModel.metrics.dealEconomics.annualCashFlow)
-                        .padding(.horizontal)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 20)
             }
             
             // Stress test
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Stress Test")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
-                VStack(spacing: 12) {
-                    StressTestRow(
+            ModernSection(title: "Stress Test", background: cardBackground) {
+                VStack(spacing: 16) {
+                    ModernStressRow(
                         title: "Worst Case Cash Flow",
                         subtitle: "Rent -10%, Vacancy +5%, Expenses +10%",
                         value: viewModel.metrics.riskBuffers.stressTestResults.worstCaseCashFlow.asCurrency,
@@ -513,7 +527,7 @@ struct PropertyDetailView: View {
                     
                     Divider()
                     
-                    StressTestRow(
+                    ModernStressRow(
                         title: "Max Vacancy Before Negative",
                         subtitle: "Occupancy can drop to",
                         value: (1 - viewModel.metrics.riskBuffers.stressTestResults.maxVacancyBeforeNegative).asPercent(),
@@ -522,31 +536,272 @@ struct PropertyDetailView: View {
                     
                     Divider()
                     
-                    StressTestRow(
+                    ModernStressRow(
                         title: "Max Rate Before Negative",
                         subtitle: "Rate can increase to",
                         value: viewModel.metrics.riskBuffers.stressTestResults.maxRateBeforeNegative.asPercent(),
                         isPositive: viewModel.metrics.riskBuffers.stressTestResults.maxRateBeforeNegative >= viewModel.property.financing.interestRate + 0.02
                     )
                 }
-                .padding()
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal)
+                .padding(16)
             }
         }
-        .padding(.bottom)
     }
     
     // MARK: - Notes Section
     
     private var notesSection: some View {
         NotesView(propertyID: viewModel.property.id)
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Modern Components
+
+struct QuickStat: View {
+    let value: String
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(.body, design: .rounded, weight: .semibold))
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct ModernScoreBadge: View {
+    let score: Double
+    let recommendation: InvestmentRecommendation
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.1), lineWidth: 4)
+                .frame(width: 64, height: 64)
+            
+            Circle()
+                .trim(from: 0, to: score / 100)
+                .stroke(recommendation.color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 64, height: 64)
+                .rotationEffect(.degrees(-90))
+            
+            VStack(spacing: 0) {
+                Text("\(Int(score))")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+            }
+        }
+    }
+}
+
+struct HeroMetricCard: View {
+    let title: String
+    let value: String
+    let isPositive: Bool
+    let background: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            Text(value)
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(isPositive ? .green : .red)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+struct ModernMetricRow: View {
+    let metric: ScoredMetric
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(metric.name)
+                    .font(.subheadline)
+                
+                Text("Target: \(metric.displayThreshold)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                Text(metric.displayValue)
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .foregroundStyle(metric.score.color)
+                
+                Circle()
+                    .fill(metric.score.color.opacity(0.15))
+                    .frame(width: 24, height: 24)
+                    .overlay {
+                        Image(systemName: metric.score.icon)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(metric.score.color)
+                    }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+    }
+}
+
+struct ModernSection<Content: View>: View {
+    let title: String
+    let background: Color
+    @ViewBuilder let content: () -> Content
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 20)
+            
+            content()
+                .background(background)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 20)
+        }
+    }
+}
+
+struct ModernEconomicsRow: View {
+    let title: String
+    let value: String
+    var valueColor: Color? = nil
+    var isHighlighted: Bool = false
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(isHighlighted ? .medium : .regular)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: isHighlighted ? .semibold : .medium))
+                .foregroundStyle(valueColor ?? .primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isHighlighted ? Color.primary.opacity(0.03) : Color.clear)
+    }
+}
+
+struct ModernMarketRow: View {
+    let title: String
+    let indicator: MarketIndicator
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                
+                Text(indicator.description)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                Text(indicator.displayValue)
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                
+                HStack(spacing: 4) {
+                    Image(systemName: indicator.trend.rawValue)
+                        .font(.caption2)
+                    
+                    Text(indicator.signal.rawValue)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                }
+                .foregroundStyle(indicator.signal.color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(indicator.signal.color.opacity(0.12))
+                .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+struct ModernStressRow: View {
+    let title: String
+    let subtitle: String
+    let value: String
+    let isPositive: Bool
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            
+            Spacer()
+            
+            Text(value)
+                .font(.system(.body, design: .rounded, weight: .semibold))
+                .foregroundStyle(isPositive ? .green : .red)
+        }
+    }
+}
+
+// MARK: - Stat Pill (kept for compatibility)
+
+struct StatPill: View {
+    let icon: String
+    let value: String
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+            Text(value)
+        }
+        .foregroundStyle(.secondary)
+    }
+}
+
+// MARK: - Section Header (kept for compatibility)
+
+struct SectionHeader: View {
+    let title: String
+    let icon: String
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.subheadline)
+            Text(title)
+                .font(.headline)
+        }
+        .foregroundStyle(.primary)
+    }
+}
+
+// MARK: - Economics Row (kept for compatibility)
 
 struct EconomicsRow: View {
     let title: String
@@ -602,14 +857,21 @@ struct StressTestRow: View {
 struct FinancingSheet: View {
     @Bindable var viewModel: PropertyDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
     
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 32) {
                     // Rent
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Income", icon: "arrow.up.circle.fill")
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Income")
+                            .font(.headline)
+                            .fontWeight(.semibold)
                         
                         CurrencyField(title: "Monthly Rent (per unit)", value: $viewModel.property.estimatedRentPerUnit)
                             .onChange(of: viewModel.property.estimatedRentPerUnit) { _, newValue in
@@ -624,11 +886,13 @@ struct FinancingSheet: View {
                             format: .percent
                         )
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     
                     // Financing
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Financing", icon: "banknote.fill")
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Financing")
+                            .font(.headline)
+                            .fontWeight(.semibold)
                         
                         CurrencyField(title: "Purchase Price", value: $viewModel.property.financing.purchasePrice)
                         
@@ -645,11 +909,13 @@ struct FinancingSheet: View {
                         
                         PercentField(title: "Interest Rate", value: $viewModel.property.financing.interestRate)
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     
                     // Expenses
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Expenses", icon: "arrow.down.circle.fill")
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Expenses")
+                            .font(.headline)
+                            .fontWeight(.semibold)
                         
                         CurrencyField(title: "Annual Taxes", value: $viewModel.property.annualTaxes)
                         CurrencyField(title: "Annual Insurance", value: $viewModel.property.insuranceAnnual)
@@ -664,11 +930,13 @@ struct FinancingSheet: View {
                         
                         CurrencyField(title: "Repairs (per unit/year)", value: $viewModel.property.repairsPerUnit)
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     
                     // Thresholds
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Target Thresholds", icon: "target")
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Target Thresholds")
+                            .font(.headline)
+                            .fontWeight(.semibold)
                         
                         PercentField(title: "Target Cap Rate", value: $viewModel.property.thresholds.targetCapRate)
                         PercentField(title: "Target Cash-on-Cash", value: $viewModel.property.thresholds.targetCashOnCash)
@@ -686,15 +954,16 @@ struct FinancingSheet: View {
                                 Text("x")
                                     .foregroundStyle(.secondary)
                             }
-                            .padding(12)
-                            .background(Color(.systemGray6))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .padding(14)
+                            .background(Color.primary.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                 }
-                .padding(.vertical)
+                .padding(.vertical, 24)
             }
+            .background(backgroundColor.ignoresSafeArea())
             .navigationTitle("Edit Assumptions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -702,6 +971,7 @@ struct FinancingSheet: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .fontWeight(.semibold)
                 }
             }
         }
@@ -713,75 +983,90 @@ struct FinancingSheet: View {
 struct SensitivitySheet: View {
     let metrics: DealMetrics
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
+    }
     
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
                     // Base case
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Base Case")
                             .font(.headline)
+                            .fontWeight(.semibold)
                         
                         HStack {
                             Text("Annual Cash Flow")
+                                .font(.subheadline)
                             Spacer()
                             Text(metrics.dealEconomics.annualCashFlow.asCurrency)
                                 .font(.system(.body, design: .rounded, weight: .semibold))
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(16)
+                        .background(cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     
                     // Rent sensitivity
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Rent Sensitivity")
                             .font(.headline)
+                            .fontWeight(.semibold)
                         
                         VStack(spacing: 0) {
                             SensitivityDetailRow(result: metrics.riskBuffers.sensitivityAnalysis.rentUp10)
-                            Divider()
+                            Divider().padding(.leading, 16)
                             SensitivityDetailRow(result: metrics.riskBuffers.sensitivityAnalysis.rentDown10)
                         }
-                        .background(Color(.systemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     
                     // Rate sensitivity
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Rate Sensitivity")
                             .font(.headline)
+                            .fontWeight(.semibold)
                         
                         VStack(spacing: 0) {
                             SensitivityDetailRow(result: metrics.riskBuffers.sensitivityAnalysis.rateUp1)
-                            Divider()
+                            Divider().padding(.leading, 16)
                             SensitivityDetailRow(result: metrics.riskBuffers.sensitivityAnalysis.rateDown1)
                         }
-                        .background(Color(.systemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     
                     // Exit cap sensitivity
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Exit Cap Sensitivity (Valuation)")
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Exit Cap Sensitivity")
                             .font(.headline)
+                            .fontWeight(.semibold)
                         
                         VStack(spacing: 0) {
                             SensitivityDetailRow(result: metrics.riskBuffers.sensitivityAnalysis.exitCapUp50bps)
-                            Divider()
+                            Divider().padding(.leading, 16)
                             SensitivityDetailRow(result: metrics.riskBuffers.sensitivityAnalysis.exitCapDown50bps)
                         }
-                        .background(Color(.systemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                 }
-                .padding(.vertical)
+                .padding(.vertical, 24)
             }
+            .background(backgroundColor.ignoresSafeArea())
             .navigationTitle("Sensitivity Analysis")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -789,6 +1074,7 @@ struct SensitivitySheet: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .fontWeight(.semibold)
                 }
             }
         }
@@ -799,7 +1085,7 @@ struct SensitivityDetailRow: View {
     let result: SensitivityResult
     
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             HStack {
                 Text(result.label)
                     .font(.subheadline)
@@ -819,34 +1105,37 @@ struct SensitivityDetailRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Cash Flow")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.tertiary)
                     Text(result.cashFlow.asCurrency)
                         .font(.caption)
+                        .fontWeight(.medium)
                 }
                 
                 Spacer()
                 
-                VStack(alignment: .center, spacing: 2) {
+                VStack(spacing: 2) {
                     Text("CoC")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.tertiary)
                     Text(result.cashOnCash.asPercent())
                         .font(.caption)
+                        .fontWeight(.medium)
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("DSCR")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.tertiary)
                     Text(String(format: "%.2fx", result.dscr))
                         .font(.caption)
+                        .fontWeight(.medium)
                 }
             }
         }
-        .padding()
+        .padding(16)
     }
 }
 

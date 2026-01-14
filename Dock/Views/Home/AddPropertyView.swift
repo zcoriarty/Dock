@@ -275,33 +275,34 @@ struct AddPropertyView: View {
     
     private var reviewStep: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 let metrics = viewModel.property.metrics
                 
                 // Property Header Card
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .fill(Color.accentColor.opacity(0.1))
                             Image(systemName: "house.fill")
-                                .font(.title2)
+                                .font(.title3)
                                 .foregroundStyle(.tint)
                         }
-                        .frame(width: 48, height: 48)
+                        .frame(width: 40, height: 40)
                         
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(viewModel.property.address)
-                                .font(.headline)
-                            Text("\(viewModel.property.city), \(viewModel.property.state) \(viewModel.property.zipCode)")
                                 .font(.subheadline)
+                                .fontWeight(.semibold)
+                            Text("\(viewModel.property.city), \(viewModel.property.state) \(viewModel.property.zipCode)")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     
                     Divider()
                     
-                    HStack(spacing: 20) {
+                    HStack(spacing: 16) {
                         PropertyStat(icon: "bed.double.fill", value: "\(viewModel.property.bedrooms)", label: "beds")
                         PropertyStat(icon: "shower.fill", value: String(format: "%.1f", viewModel.property.bathrooms), label: "baths")
                         PropertyStat(icon: "square.fill", value: viewModel.property.squareFeet.withCommas, label: "sq ft")
@@ -312,40 +313,41 @@ struct AddPropertyView: View {
                 }
                 .padding(16)
                 .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 
                 // Investment Score Card
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
                     Text("Investment Score")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
-                    HStack(spacing: 16) {
+                    HStack(spacing: 14) {
                         // Score Ring
                         ZStack {
                             Circle()
-                                .stroke(metrics.recommendation.color.opacity(0.2), lineWidth: 8)
+                                .stroke(metrics.recommendation.color.opacity(0.15), lineWidth: 6)
                             
                             Circle()
                                 .trim(from: 0, to: metrics.overallScore / 100)
                                 .stroke(
                                     metrics.recommendation.color,
-                                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
                                 )
                                 .rotationEffect(.degrees(-90))
                             
                             Text("\(Int(metrics.overallScore))")
-                                .font(.system(.title2, design: .rounded, weight: .bold))
+                                .font(.system(.title3, design: .rounded, weight: .bold))
                         }
-                        .frame(width: 64, height: 64)
+                        .frame(width: 56, height: 56)
                         
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
                                 Image(systemName: metrics.recommendation.icon)
                                 Text(metrics.recommendation.rawValue)
                             }
-                            .font(.headline)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
                             .foregroundStyle(metrics.recommendation.color)
                             
                             Text(metrics.recommendation.description)
@@ -357,16 +359,16 @@ struct AddPropertyView: View {
                 }
                 .padding(16)
                 .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 
                 // Key Metrics
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Key Metrics")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                         ReviewMetricCard(
                             title: "Cap Rate",
                             value: metrics.dealEconomics.inPlaceCapRate.asPercent(),
@@ -403,9 +405,9 @@ struct AddPropertyView: View {
                 }
                 
                 // Financial Summary
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Financial Summary")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
@@ -420,9 +422,9 @@ struct AddPropertyView: View {
                 }
                 
                 // Income & Expenses
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Income & Expenses")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
@@ -501,38 +503,24 @@ struct FormSection<Content: View>: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.subheadline)
                     .foregroundStyle(.tint)
                 
                 Text(title)
-                    .font(.headline)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
             }
             
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 content
             }
-            .padding(16)
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-    }
-}
-
-struct SectionHeader: View {
-    let title: String
-    let icon: String
-    
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .foregroundStyle(.tint)
-            
-            Text(title)
-                .font(.headline)
-        }
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -558,7 +546,7 @@ struct CompactStepperField: View {
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(value > range.lowerBound ? .primary : .tertiary)
+                        .foregroundColor(value > range.lowerBound ? .accentColor : Color(.tertiaryLabel))
                 }
                 
                 Spacer()
@@ -578,12 +566,17 @@ struct CompactStepperField: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(value < range.upperBound ? .primary : .tertiary)
+                        .foregroundColor(value < range.upperBound ? .accentColor : Color(.tertiaryLabel))
                 }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color(.separator), lineWidth: 0.5)
+            }
         }
     }
 }
@@ -609,7 +602,7 @@ struct CompactBathroomField: View {
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(value > 0 ? .primary : .tertiary)
+                        .foregroundColor(value > 0 ? .accentColor : Color(.tertiaryLabel))
                 }
                 
                 Spacer()
@@ -627,11 +620,17 @@ struct CompactBathroomField: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color(.separator), lineWidth: 0.5)
+            }
         }
     }
 }
@@ -649,9 +648,14 @@ struct InlineDisplayRow: View {
             Text(value)
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
         }
-        .padding(12)
-        .background(Color(.systemGray6))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color(.separator), lineWidth: 0.5)
+        }
     }
 }
 
@@ -699,7 +703,7 @@ struct ReviewMetricCard: View {
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(score.color)
         }
-        .padding(12)
+        .padding(14)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
@@ -724,8 +728,7 @@ struct FinancialRow: View {
                 .foregroundStyle(valueColor ?? (isHighlighted ? .primary : .secondary))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(isHighlighted ? Color(.systemGray5).opacity(0.5) : Color.clear)
+        .padding(.vertical, 10)
     }
 }
 
@@ -743,11 +746,15 @@ struct PropertyTypeChip: View {
                 Text(type.rawValue)
                     .font(.caption)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.accentColor : Color(.systemGray5))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color.accentColor : Color.clear)
             .foregroundStyle(isSelected ? .white : .primary)
             .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isSelected ? Color.clear : Color(.separator), lineWidth: 0.5)
+            }
         }
         .buttonStyle(.plain)
     }
@@ -769,7 +776,7 @@ struct SummaryRow: View {
             Text(value)
                 .font(.system(.subheadline, design: .rounded, weight: isHighlighted ? .semibold : .regular))
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }
 

@@ -163,6 +163,20 @@ final class AddPropertyViewModel {
                 property.taxAssessedValue = propertyData.taxAssessedValue
                 property.annualTaxes = propertyData.annualTaxes
                 property.photoURLs = propertyData.photoURLs
+                property.listingURL = propertyData.listingURL
+                
+                // Download primary photo if available
+                if let primaryPhotoURL = propertyData.primaryPhotoURL,
+                   let imageURL = URL(string: primaryPhotoURL) {
+                    print("📸 Downloading primary photo from: \(primaryPhotoURL)")
+                    do {
+                        let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
+                        property.primaryPhotoData = imageData
+                        print("📸 Photo downloaded successfully (\(imageData.count) bytes)")
+                    } catch {
+                        print("⚠️ Failed to download photo: \(error.localizedDescription)")
+                    }
+                }
                 
                 // Set financing
                 if property.financing.purchasePrice == 0 {

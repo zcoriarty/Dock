@@ -18,6 +18,7 @@ struct PropertyNote: Identifiable, Hashable, Sendable {
     var content: String
     var sortOrder: Int
     var media: [NoteMedia]
+    var tagIDs: [UUID]
     
     init(
         id: UUID = UUID(),
@@ -26,7 +27,8 @@ struct PropertyNote: Identifiable, Hashable, Sendable {
         areaName: String = "",
         content: String = "",
         sortOrder: Int = 0,
-        media: [NoteMedia] = []
+        media: [NoteMedia] = [],
+        tagIDs: [UUID] = []
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -35,7 +37,56 @@ struct PropertyNote: Identifiable, Hashable, Sendable {
         self.content = content
         self.sortOrder = sortOrder
         self.media = media
+        self.tagIDs = tagIDs
     }
+}
+
+// MARK: - Note Tag (Reusable across properties)
+
+struct NoteTag: Identifiable, Hashable, Codable, Sendable {
+    let id: UUID
+    var name: String
+    var colorHex: String
+    var createdAt: Date
+    
+    init(
+        id: UUID = UUID(),
+        name: String,
+        colorHex: String = "#6B7280",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.colorHex = colorHex
+        self.createdAt = createdAt
+    }
+    
+    var color: Color {
+        Color(hex: colorHex) ?? .gray
+    }
+    
+    // Preset tag colors
+    static let presetColors: [String] = [
+        "#EF4444", // Red
+        "#F97316", // Orange
+        "#EAB308", // Yellow
+        "#22C55E", // Green
+        "#14B8A6", // Teal
+        "#3B82F6", // Blue
+        "#8B5CF6", // Purple
+        "#EC4899", // Pink
+        "#6B7280", // Gray
+    ]
+    
+    // Common default tags
+    static let defaultTags: [NoteTag] = [
+        NoteTag(name: "Needs Repair", colorHex: "#EF4444"),
+        NoteTag(name: "Good Condition", colorHex: "#22C55E"),
+        NoteTag(name: "Follow Up", colorHex: "#F97316"),
+        NoteTag(name: "Question", colorHex: "#3B82F6"),
+        NoteTag(name: "Important", colorHex: "#8B5CF6"),
+        NoteTag(name: "Renovation", colorHex: "#EAB308"),
+    ]
 }
 
 // MARK: - Note Media

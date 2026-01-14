@@ -64,6 +64,7 @@
         <attribute name="areaName" optional="YES" attributeType="String"/>
         <attribute name="content" optional="YES" attributeType="String"/>
         <attribute name="sortOrder" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="tagIDs" optional="YES" attributeType="String"/>
         <relationship name="property" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="PropertyEntity" inverseName="notes" inverseEntity="PropertyEntity"/>
         <relationship name="media" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaEntity" inverseName="note" inverseEntity="MediaEntity"/>
     </entity>

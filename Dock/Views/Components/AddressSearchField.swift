@@ -26,7 +26,7 @@ struct AddressSearchField: View {
                 
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                     
                     TextField("Start typing an address...", text: $searchCompleter.searchQuery)
                         .textContentType(.fullStreetAddress)
@@ -64,12 +64,13 @@ struct AddressSearchField: View {
                             .foregroundStyle(.green)
                     }
                 }
-                .padding(12)
-                .background(Color(.systemGray6))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(isFocused ? Color.accentColor : .clear, lineWidth: 2)
+                        .stroke(isFocused ? Color.accentColor : Color(.separator), lineWidth: isFocused ? 1.5 : 0.5)
                 }
             }
             

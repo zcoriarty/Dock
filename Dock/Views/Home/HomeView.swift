@@ -12,25 +12,21 @@ struct HomeView: View {
     @State private var showingAddProperty = false
     @State private var selectedProperty: Property?
     @State private var showingFilters = false
-    @State private var viewMode: ViewMode = .cards
+    @Environment(\.colorScheme) private var colorScheme
     
-    enum ViewMode: String, CaseIterable {
-        case cards = "Cards"
-        case list = "List"
-        
-        var icon: String {
-            switch self {
-            case .cards: return "square.grid.2x2"
-            case .list: return "list.bullet"
-            }
-        }
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
     }
     
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background
-                Color(.systemGroupedBackground)
+                backgroundColor
                     .ignoresSafeArea()
                 
                 if viewModel.properties.isEmpty && !viewModel.isLoading {
@@ -39,7 +35,7 @@ struct HomeView: View {
                     mainContent
                 }
             }
-            .navigationTitle("Dock")
+            .navigationTitle("\(viewModel.properties.count) Home\(viewModel.properties.count == 1 ? "" : "s")")
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $viewModel.searchText, prompt: "Search properties")
             .toolbar {
@@ -78,34 +74,20 @@ struct HomeView: View {
                         }
                     } label: {
                         Image(systemName: "arrow.up.arrow.down.circle")
+                            .fontWeight(.medium)
                             .symbolVariant(viewModel.sortOption != .dateAdded ? .fill : .none)
                     }
                 }
                 
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        // View mode toggle
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                viewMode = viewMode == .cards ? .list : .cards
-                            }
-                            Task { @MainActor in
-                                HapticManager.shared.impact(.light)
-                            }
-                        } label: {
-                            Image(systemName: viewMode.icon)
+                    Button {
+                        showingAddProperty = true
+                        Task { @MainActor in
+                            HapticManager.shared.impact(.medium)
                         }
-                        
-                        // Add button
-                        Button {
-                            showingAddProperty = true
-                            Task { @MainActor in
-                                HapticManager.shared.impact(.medium)
-                            }
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .fontWeight(.semibold)
                     }
                 }
             }
@@ -136,51 +118,16 @@ struct HomeView: View {
     
     private var mainContent: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
-                // Summary header
-                if !viewModel.properties.isEmpty {
-                    summaryHeader
-                        .padding(.horizontal)
-                }
-                
+            LazyVStack(spacing: 20) {
                 // Folders
                 if !viewModel.folders.isEmpty {
                     foldersSection
                 }
                 
                 // Properties
-                switch viewMode {
-                case .cards:
-                    propertyCards
-                case .list:
-                    propertyList
-                }
+                propertyCards
             }
-            .padding(.vertical)
-        }
-    }
-    
-    // MARK: - Summary Header
-    
-    private var summaryHeader: some View {
-        HStack(spacing: 12) {
-            SummaryPill(
-                title: "Properties",
-                value: "\(viewModel.properties.count)",
-                icon: "house.fill"
-            )
-            
-            SummaryPill(
-                title: "Total Value",
-                value: viewModel.totalValue.asCompactCurrency,
-                icon: "dollarsign.circle.fill"
-            )
-            
-            SummaryPill(
-                title: "Avg Cap",
-                value: viewModel.averageCapRate.asPercent(),
-                icon: "chart.line.uptrend.xyaxis"
-            )
+            .padding(.vertical, 16)
         }
     }
     
@@ -188,27 +135,29 @@ struct HomeView: View {
     
     private var foldersSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 // All properties
-                FolderChip(
+                ModernFolderChip(
                     name: "All",
                     count: viewModel.properties.count,
-                    color: .gray,
-                    isSelected: viewModel.selectedFolder == nil
+                    color: .primary,
+                    isSelected: viewModel.selectedFolder == nil,
+                    colorScheme: colorScheme
                 ) {
-                    withAnimation {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         viewModel.selectedFolder = nil
                     }
                 }
                 
                 // Pinned
                 if viewModel.pinnedCount > 0 {
-                    FolderChip(
+                    ModernFolderChip(
                         name: "Pinned",
                         count: viewModel.pinnedCount,
                         color: .orange,
                         isSelected: false,
-                        icon: "pin.fill"
+                        icon: "pin.fill",
+                        colorScheme: colorScheme
                     ) {
                         // Filter to pinned
                     }
@@ -216,13 +165,14 @@ struct HomeView: View {
                 
                 // Custom folders
                 ForEach(viewModel.folders) { folder in
-                    FolderChip(
+                    ModernFolderChip(
                         name: folder.name,
                         count: viewModel.properties.filter { $0.folderID == folder.id }.count,
                         color: folder.color,
-                        isSelected: viewModel.selectedFolder?.id == folder.id
+                        isSelected: viewModel.selectedFolder?.id == folder.id,
+                        colorScheme: colorScheme
                     ) {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             viewModel.selectedFolder = folder
                         }
                     }
@@ -232,15 +182,16 @@ struct HomeView: View {
                 Button {
                     viewModel.showingFolderSheet = true
                 } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.body)
+                    Image(systemName: "plus")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
-                        .padding(10)
-                        .background(.ultraThinMaterial)
+                        .frame(width: 36, height: 36)
+                        .background(cardBackground)
                         .clipShape(Circle())
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
         }
     }
     
@@ -249,8 +200,10 @@ struct HomeView: View {
     private var propertyCards: some View {
         LazyVStack(spacing: 16) {
             ForEach(viewModel.displayedProperties) { property in
-                PropertyCard(
+                ModernPropertyCard(
                     property: property,
+                    cardBackground: cardBackground,
+                    colorScheme: colorScheme,
                     onPin: {
                         Task {
                             await viewModel.togglePin(property)
@@ -270,109 +223,346 @@ struct HomeView: View {
                 }
             }
         }
-        .padding(.horizontal)
-    }
-    
-    // MARK: - Property List
-    
-    private var propertyList: some View {
-        LazyVStack(spacing: 8) {
-            ForEach(viewModel.displayedProperties) { property in
-                PropertyCompactCard(property: property)
-                    .onTapGesture {
-                        selectedProperty = property
-                        Task { @MainActor in
-                            HapticManager.shared.impact(.light)
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            Task {
-                                await viewModel.togglePin(property)
-                            }
-                        } label: {
-                            Label(
-                                property.isPinned ? "Unpin" : "Pin",
-                                systemImage: property.isPinned ? "pin.slash" : "pin"
-                            )
-                        }
-                        
-                        Divider()
-                        
-                        Button(role: .destructive) {
-                            Task {
-                                await viewModel.deleteProperty(property)
-                            }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-            }
-        }
-        .padding(.horizontal)
+        .padding(.horizontal, 20)
     }
     
     // MARK: - Empty State
     
     private var emptyState: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "building.2.crop.circle")
-                .font(.system(size: 64))
-                .foregroundStyle(.tertiary)
-            
-            VStack(spacing: 8) {
-                Text("No Properties Yet")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+        VStack(spacing: 32) {
+            VStack(spacing: 16) {
+                Circle()
+                    .fill(cardBackground)
+                    .frame(width: 80, height: 80)
+                    .overlay {
+                        Image(systemName: "building.2")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.secondary)
+                    }
                 
-                Text("Add your first investment property to start analyzing deals")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                VStack(spacing: 8) {
+                    Text("No Properties Yet")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    
+                    Text("Add your first investment property to start analyzing deals")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
             }
             
             Button {
                 showingAddProperty = true
             } label: {
-                Label("Add Property", systemImage: "plus")
-                    .font(.headline)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(.tint)
-                    .foregroundStyle(.white)
+                Text("Add Property")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 14)
+                    .background(Color.primary)
+                    .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
                     .clipShape(Capsule())
             }
         }
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Modern Folder Chip
 
-struct SummaryPill: View {
-    let title: String
-    let value: String
-    let icon: String
+struct ModernFolderChip: View {
+    let name: String
+    let count: Int
+    let color: Color
+    let isSelected: Bool
+    var icon: String? = nil
+    var colorScheme: ColorScheme
+    let action: () -> Void
     
     var body: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.caption2)
-                Text(title)
-                    .font(.caption2)
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon = icon {
+                    Image(systemName: icon)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                } else if !isSelected {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 6, height: 6)
+                }
+                
+                Text(name)
+                    .font(.subheadline)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                
+                Text("\(count)")
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? Color.primary.opacity(0.7) : Color.secondary.opacity(1))
             }
-            .foregroundStyle(.secondary)
-            
-            Text(value)
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(isSelected ? Color.primary : Color.clear)
+            .foregroundStyle(isSelected ? (colorScheme == .dark ? Color.black : Color.white) : .primary)
+            .clipShape(Capsule())
+            .overlay {
+                if !isSelected {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.15), lineWidth: 1)
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .buttonStyle(.plain)
     }
 }
+
+// MARK: - Modern Property Card
+
+struct ModernPropertyCard: View {
+    let property: Property
+    let cardBackground: Color
+    let colorScheme: ColorScheme
+    let onPin: () -> Void
+    let onDelete: () -> Void
+    
+    private var score: Double {
+        property.metrics.overallScore
+    }
+    
+    private var recommendation: InvestmentRecommendation {
+        property.metrics.recommendation
+    }
+    
+    private var hasImage: Bool {
+        if let photoData = property.primaryPhotoData,
+           UIImage(data: photoData) != nil {
+            return true
+        }
+        return false
+    }
+    
+    var body: some View {
+        Group {
+            if hasImage {
+                largeCardLayout
+            } else {
+                compactCardLayout
+            }
+        }
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contextMenu {
+            Button {
+                onPin()
+            } label: {
+                Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+    
+    // MARK: - Large Card Layout (with image)
+    
+    private var largeCardLayout: some View {
+        VStack(spacing: 0) {
+            // Image section
+            ZStack(alignment: .topTrailing) {
+                if let photoData = property.primaryPhotoData,
+                   let uiImage = UIImage(data: photoData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 140)
+                        .clipped()
+                }
+                
+                // Score badge overlay
+                scoreBadge
+                    .padding(12)
+            }
+            
+            // Content
+            VStack(alignment: .leading, spacing: 12) {
+                // Price and pin
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(property.askingPrice.asCompactCurrency)
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                        
+                        Text(property.address)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        
+                        Text("\(property.city), \(property.state)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    // Pin indicator
+                    if property.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                
+                // Stats row
+                HStack(spacing: 16) {
+                    CardStat(value: "\(property.bedrooms)", label: "Beds")
+                    CardStat(value: String(format: "%.1f", property.bathrooms), label: "Baths")
+                    CardStat(value: property.squareFeet.withCommas, label: "Sq Ft")
+                    
+                    Spacer()
+                    
+                    cashFlowBadge
+                }
+            }
+            .padding(16)
+        }
+    }
+    
+    // MARK: - Compact Card Layout (no image)
+    
+    private var compactCardLayout: some View {
+        HStack(spacing: 14) {
+            // Square placeholder on the left
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.primary.opacity(0.06),
+                                Color.primary.opacity(0.03)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                Image(systemName: property.propertyType.icon)
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.primary.opacity(0.2))
+            }
+            .frame(maxWidth: 100)
+            
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
+                // Top row: Price, score badge, pin
+                HStack(alignment: .center) {
+                    Text(property.askingPrice.asCompactCurrency)
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                    
+                    Spacer()
+                    
+                    scoreBadge
+                    
+                    if property.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                
+                // Address
+                Text(property.address)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                
+                Text("\(property.city), \(property.state)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                // Stats row
+                HStack(spacing: 12) {
+                    CompactStat(value: "\(property.bedrooms)", label: "bd")
+                    CompactStat(value: String(format: "%.1f", property.bathrooms), label: "ba")
+                    CompactStat(value: property.squareFeet.withCommas, label: "sqft")
+                    
+                    Spacer()
+                    
+                    cashFlowBadge
+                }
+            }
+        }
+        .padding(12)
+    }
+    
+    // MARK: - Shared Components
+    
+    private var scoreBadge: some View {
+        HStack(spacing: 6) {
+            Text("\(Int(score))")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+            
+            Circle()
+                .fill(recommendation.color)
+                .frame(width: 8, height: 8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+    }
+    
+    private var cashFlowBadge: some View {
+        let cashFlow = property.metrics.dealEconomics.monthlyCashFlow
+        return Text(cashFlow.asCurrency)
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .foregroundStyle(cashFlow >= 0 ? .green : .red)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background((cashFlow >= 0 ? Color.green : Color.red).opacity(0.1))
+            .clipShape(Capsule())
+    }
+}
+
+// MARK: - Compact Stat
+
+struct CompactStat: View {
+    let value: String
+    let label: String
+    
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(value)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Card Stat
+
+struct CardStat: View {
+    let value: String
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Legacy Support
 
 struct FolderChip: View {
     let name: String
