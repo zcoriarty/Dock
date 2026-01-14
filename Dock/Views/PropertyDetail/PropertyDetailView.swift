@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PropertyDetailView: View {
     @State private var viewModel: PropertyDetailViewModel
+    @State private var showingDealOptimizer: Bool = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
@@ -251,6 +252,9 @@ struct PropertyDetailView: View {
         }
         .sheet(isPresented: $viewModel.showingSensitivity) {
             SensitivitySheet(metrics: viewModel.metrics)
+        }
+        .sheet(isPresented: $showingDealOptimizer) {
+            DealOptimizerSheet(viewModel: viewModel)
         }
     }
     
@@ -500,6 +504,44 @@ struct PropertyDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal, 20)
             }
+            
+            // Deal Optimizer button
+            Button {
+                showingDealOptimizer = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "slider.horizontal.below.square.and.square.filled")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Deal Optimizer")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text("Find your ideal purchase price")
+                            .font(.caption)
+                            .opacity(0.8)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
+                .padding(16)
+                .background(
+                    LinearGradient(
+                        colors: [Color.blue, Color.blue.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
         }
     }
     
@@ -1725,6 +1767,682 @@ struct SensitivityDetailRow: View {
             }
         }
         .padding(16)
+    }
+}
+
+// MARK: - Deal Optimizer Sheet
+
+struct DealOptimizerSheet: View {
+    @Bindable var viewModel: PropertyDetailViewModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    
+    // Local state for sliders (to avoid modifying actual property until applied)
+    @State private var purchasePrice: Double
+    @State private var monthlyRent: Double
+    @State private var interestRate: Double
+    @State private var ltv: Double
+    @State private var showingOptimalPrice: Bool = false
+    @State private var optimalPriceResult: OptimalPriceResult?
+    
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
+    }
+    
+    // Price range: 70% to 130% of asking price
+    private var priceRange: ClosedRange<Double> {
+        let asking = viewModel.property.askingPrice
+        let minPrice = max(asking * 0.70, 50000)
+        let maxPrice = asking * 1.30
+        return minPrice...maxPrice
+    }
+    
+    // Rent range: 50% to 150% of estimated rent
+    private var rentRange: ClosedRange<Double> {
+        let baseRent = viewModel.property.estimatedRentPerUnit > 0 
+            ? viewModel.property.estimatedRentPerUnit 
+            : viewModel.property.askingPrice * 0.008 // Rough estimate
+        return max(baseRent * 0.50, 500)...baseRent * 1.50
+    }
+    
+    init(viewModel: PropertyDetailViewModel) {
+        self.viewModel = viewModel
+        let property = viewModel.property
+        let financing = property.financing
+        
+        _purchasePrice = State(initialValue: financing.purchasePrice > 0 ? financing.purchasePrice : property.askingPrice)
+        _monthlyRent = State(initialValue: property.estimatedRentPerUnit > 0 ? property.estimatedRentPerUnit : property.askingPrice * 0.008)
+        _interestRate = State(initialValue: financing.interestRate)
+        _ltv = State(initialValue: financing.ltv)
+    }
+    
+    // Calculate metrics based on current slider values
+    private var simulatedMetrics: SimulatedDealMetrics {
+        var testProperty = viewModel.property
+        testProperty.financing.purchasePrice = purchasePrice
+        testProperty.financing.ltv = ltv
+        testProperty.financing.loanAmount = purchasePrice * ltv
+        testProperty.financing.interestRate = interestRate
+        testProperty.estimatedRentPerUnit = monthlyRent
+        testProperty.estimatedTotalRent = monthlyRent * Double(testProperty.unitCount)
+        
+        let economics = UnderwritingEngine.calculateDealEconomics(for: testProperty)
+        let thresholds = viewModel.property.thresholds
+        
+        return SimulatedDealMetrics(
+            capRate: economics.inPlaceCapRate,
+            cashOnCash: economics.cashOnCashReturn,
+            dscr: economics.dscr,
+            monthlyCashFlow: economics.monthlyCashFlow,
+            annualCashFlow: economics.annualCashFlow,
+            totalCashRequired: (purchasePrice * (1 - ltv)) + viewModel.property.financing.closingCosts,
+            noi: economics.netOperatingIncome,
+            capRateMeetsTarget: economics.inPlaceCapRate >= thresholds.targetCapRate,
+            cashOnCashMeetsTarget: economics.cashOnCashReturn >= thresholds.targetCashOnCash,
+            dscrMeetsTarget: economics.dscr >= thresholds.targetDSCR,
+            cashFlowPositive: economics.monthlyCashFlow > 0
+        )
+    }
+    
+    // Calculate comparison to asking price
+    private var priceVsAskingPercent: Double {
+        guard viewModel.property.askingPrice > 0 else { return 0 }
+        return (purchasePrice - viewModel.property.askingPrice) / viewModel.property.askingPrice
+    }
+    
+    private var allMetricsMet: Bool {
+        let metrics = simulatedMetrics
+        return metrics.capRateMeetsTarget && 
+               metrics.cashOnCashMeetsTarget && 
+               metrics.dscrMeetsTarget && 
+               metrics.cashFlowPositive
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header with current vs asking comparison
+                    priceComparisonHeader
+                    
+                    // Key metrics display
+                    metricsOverview
+                    
+                    // Sliders section
+                    slidersSection
+                    
+                    // Optimal price finder
+                    optimalPriceFinder
+                    
+                    // Apply changes button
+                    applyButton
+                }
+                .padding(.vertical, 24)
+            }
+            .background(backgroundColor.ignoresSafeArea())
+            .navigationTitle("Deal Optimizer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Reset") {
+                        resetToOriginal()
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Price Comparison Header
+    
+    private var priceComparisonHeader: some View {
+        VStack(spacing: 16) {
+            // Current price display
+            VStack(spacing: 4) {
+                Text("Purchase Price")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Text(purchasePrice.asCompactCurrency)
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                
+                // Comparison to asking
+                HStack(spacing: 6) {
+                    let diff = purchasePrice - viewModel.property.askingPrice
+                    Image(systemName: diff >= 0 ? "arrow.up" : "arrow.down")
+                        .font(.caption)
+                    Text("\(abs(diff).asCompactCurrency) (\(abs(priceVsAskingPercent * 100).formatted(decimals: 1))%)")
+                        .font(.caption)
+                    Text("vs asking")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .foregroundStyle(priceVsAskingPercent >= 0 ? Color(red: 0.9, green: 0.3, blue: 0.3) : Color(red: 0.2, green: 0.7, blue: 0.4))
+            }
+            
+            // Deal quality indicator
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(allMetricsMet ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 1.0, green: 0.6, blue: 0.2))
+                    .frame(width: 10, height: 10)
+                
+                Text(allMetricsMet ? "All targets met" : "Some targets not met")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(allMetricsMet ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 1.0, green: 0.6, blue: 0.2))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                (allMetricsMet ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 1.0, green: 0.6, blue: 0.2))
+                    .opacity(0.12)
+            )
+            .clipShape(Capsule())
+        }
+        .padding(.horizontal, 20)
+    }
+    
+    // MARK: - Metrics Overview
+    
+    private var metricsOverview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Key Metrics")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 20)
+            
+            // Primary metrics grid
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                OptimizerMetricCard(
+                    title: "Cap Rate",
+                    value: simulatedMetrics.capRate.asPercent(),
+                    target: viewModel.property.thresholds.targetCapRate.asPercent(),
+                    meetsTarget: simulatedMetrics.capRateMeetsTarget,
+                    background: cardBackground
+                )
+                
+                OptimizerMetricCard(
+                    title: "Cash-on-Cash",
+                    value: simulatedMetrics.cashOnCash.asPercent(),
+                    target: viewModel.property.thresholds.targetCashOnCash.asPercent(),
+                    meetsTarget: simulatedMetrics.cashOnCashMeetsTarget,
+                    background: cardBackground
+                )
+                
+                OptimizerMetricCard(
+                    title: "DSCR",
+                    value: String(format: "%.2fx", simulatedMetrics.dscr),
+                    target: String(format: "%.2fx", viewModel.property.thresholds.targetDSCR),
+                    meetsTarget: simulatedMetrics.dscrMeetsTarget,
+                    background: cardBackground
+                )
+                
+                OptimizerMetricCard(
+                    title: "Monthly Cash Flow",
+                    value: simulatedMetrics.monthlyCashFlow.asCurrency,
+                    target: "> $0",
+                    meetsTarget: simulatedMetrics.cashFlowPositive,
+                    background: cardBackground
+                )
+            }
+            .padding(.horizontal, 20)
+            
+            // Secondary metrics
+            HStack(spacing: 12) {
+                SecondaryMetricPill(
+                    title: "Cash Required",
+                    value: simulatedMetrics.totalCashRequired.asCompactCurrency,
+                    background: cardBackground
+                )
+                
+                SecondaryMetricPill(
+                    title: "Annual NOI",
+                    value: simulatedMetrics.noi.asCompactCurrency,
+                    background: cardBackground
+                )
+                
+                SecondaryMetricPill(
+                    title: "Annual Cash Flow",
+                    value: simulatedMetrics.annualCashFlow.asCompactCurrency,
+                    background: cardBackground
+                )
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+    
+    // MARK: - Sliders Section
+    
+    private var slidersSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Adjust Variables")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 20)
+            
+            VStack(spacing: 16) {
+                // Purchase Price Slider
+                OptimizerSlider(
+                    title: "Purchase Price",
+                    value: $purchasePrice,
+                    range: priceRange,
+                    step: 5000,
+                    format: .currency,
+                    accentColor: .blue
+                )
+                
+                // Monthly Rent Slider
+                OptimizerSlider(
+                    title: "Monthly Rent",
+                    value: $monthlyRent,
+                    range: rentRange,
+                    step: 50,
+                    format: .currency,
+                    accentColor: .green
+                )
+                
+                // Interest Rate Slider
+                OptimizerSlider(
+                    title: "Interest Rate",
+                    value: $interestRate,
+                    range: 0.04...0.12,
+                    step: 0.0025,
+                    format: .percent,
+                    accentColor: .orange
+                )
+                
+                // LTV (Down Payment) Slider
+                OptimizerSlider(
+                    title: "Loan-to-Value (LTV)",
+                    value: $ltv,
+                    range: 0.50...0.95,
+                    step: 0.05,
+                    format: .percent,
+                    subtitle: "Down Payment: \((purchasePrice * (1 - ltv)).asCompactCurrency)",
+                    accentColor: .purple
+                )
+            }
+            .padding(16)
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal, 20)
+        }
+    }
+    
+    // MARK: - Optimal Price Finder
+    
+    private var optimalPriceFinder: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Find Optimal Price")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 20)
+            
+            VStack(spacing: 16) {
+                Text("Calculate the maximum purchase price that meets all your target thresholds with current assumptions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Button {
+                    calculateOptimalPrice()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.subheadline)
+                        Text("Find Optimal Price")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.blue.opacity(0.15))
+                    .foregroundStyle(.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                
+                if let result = optimalPriceResult {
+                    VStack(spacing: 12) {
+                        Divider()
+                        
+                        if result.foundOptimal {
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("Optimal Price")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text(result.optimalPrice.asCompactCurrency)
+                                        .font(.system(.title3, design: .rounded, weight: .bold))
+                                        .foregroundStyle(.primary)
+                                }
+                                
+                                HStack {
+                                    Text("Savings vs Asking")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text((viewModel.property.askingPrice - result.optimalPrice).asCompactCurrency)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(Color(red: 0.2, green: 0.7, blue: 0.4))
+                                }
+                                
+                                Button {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        purchasePrice = result.optimalPrice
+                                    }
+                                    HapticManager.shared.success()
+                                } label: {
+                                    Text("Apply Optimal Price")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color(red: 0.2, green: 0.7, blue: 0.4))
+                                        .foregroundStyle(.white)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 4)
+                            }
+                        } else {
+                            VStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.orange)
+                                
+                                Text(result.message)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal, 20)
+        }
+    }
+    
+    // MARK: - Apply Button
+    
+    private var applyButton: some View {
+        Button {
+            applyChanges()
+        } label: {
+            Text("Apply to Property")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.primary)
+                .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(.horizontal, 20)
+    }
+    
+    // MARK: - Actions
+    
+    private func resetToOriginal() {
+        withAnimation(.spring(response: 0.3)) {
+            let property = viewModel.property
+            purchasePrice = property.financing.purchasePrice > 0 ? property.financing.purchasePrice : property.askingPrice
+            monthlyRent = property.estimatedRentPerUnit > 0 ? property.estimatedRentPerUnit : property.askingPrice * 0.008
+            interestRate = property.financing.interestRate
+            ltv = property.financing.ltv
+            optimalPriceResult = nil
+        }
+        HapticManager.shared.impact(.light)
+    }
+    
+    private func calculateOptimalPrice() {
+        let thresholds = viewModel.property.thresholds
+        var testPrice = viewModel.property.askingPrice
+        let minPrice = priceRange.lowerBound
+        let step: Double = 5000
+        
+        var foundPrice: Double? = nil
+        
+        // Binary search would be more efficient, but let's do iterative for clarity
+        while testPrice >= minPrice {
+            var testProperty = viewModel.property
+            testProperty.financing.purchasePrice = testPrice
+            testProperty.financing.ltv = ltv
+            testProperty.financing.loanAmount = testPrice * ltv
+            testProperty.financing.interestRate = interestRate
+            testProperty.estimatedRentPerUnit = monthlyRent
+            testProperty.estimatedTotalRent = monthlyRent * Double(testProperty.unitCount)
+            
+            let economics = UnderwritingEngine.calculateDealEconomics(for: testProperty)
+            
+            let meetsCapRate = economics.inPlaceCapRate >= thresholds.targetCapRate
+            let meetsCashOnCash = economics.cashOnCashReturn >= thresholds.targetCashOnCash
+            let meetsDSCR = economics.dscr >= thresholds.targetDSCR
+            let positiveCashFlow = economics.monthlyCashFlow > 0
+            
+            if meetsCapRate && meetsCashOnCash && meetsDSCR && positiveCashFlow {
+                foundPrice = testPrice
+                break
+            }
+            
+            testPrice -= step
+        }
+        
+        if let optimal = foundPrice {
+            // Now find the maximum price that still meets all criteria
+            var maxOptimal = optimal
+            var searchPrice = optimal + step
+            
+            while searchPrice <= viewModel.property.askingPrice {
+                var testProperty = viewModel.property
+                testProperty.financing.purchasePrice = searchPrice
+                testProperty.financing.ltv = ltv
+                testProperty.financing.loanAmount = searchPrice * ltv
+                testProperty.financing.interestRate = interestRate
+                testProperty.estimatedRentPerUnit = monthlyRent
+                testProperty.estimatedTotalRent = monthlyRent * Double(testProperty.unitCount)
+                
+                let economics = UnderwritingEngine.calculateDealEconomics(for: testProperty)
+                
+                let meetsAll = economics.inPlaceCapRate >= thresholds.targetCapRate &&
+                              economics.cashOnCashReturn >= thresholds.targetCashOnCash &&
+                              economics.dscr >= thresholds.targetDSCR &&
+                              economics.monthlyCashFlow > 0
+                
+                if meetsAll {
+                    maxOptimal = searchPrice
+                }
+                
+                searchPrice += step
+            }
+            
+            optimalPriceResult = OptimalPriceResult(
+                foundOptimal: true,
+                optimalPrice: maxOptimal,
+                message: "Found optimal purchase price"
+            )
+        } else {
+            optimalPriceResult = OptimalPriceResult(
+                foundOptimal: false,
+                optimalPrice: 0,
+                message: "No price in range meets all targets.\nTry adjusting rent, rate, or LTV."
+            )
+        }
+        
+        HapticManager.shared.notification(foundPrice != nil ? .success : .warning)
+    }
+    
+    private func applyChanges() {
+        viewModel.property.financing.purchasePrice = purchasePrice
+        viewModel.property.financing.ltv = ltv
+        viewModel.property.financing.loanAmount = purchasePrice * ltv
+        viewModel.property.financing.interestRate = interestRate
+        viewModel.property.estimatedRentPerUnit = monthlyRent
+        viewModel.property.estimatedTotalRent = monthlyRent * Double(viewModel.property.unitCount)
+        
+        HapticManager.shared.success()
+        dismiss()
+    }
+}
+
+// MARK: - Deal Optimizer Supporting Types
+
+struct SimulatedDealMetrics {
+    let capRate: Double
+    let cashOnCash: Double
+    let dscr: Double
+    let monthlyCashFlow: Double
+    let annualCashFlow: Double
+    let totalCashRequired: Double
+    let noi: Double
+    let capRateMeetsTarget: Bool
+    let cashOnCashMeetsTarget: Bool
+    let dscrMeetsTarget: Bool
+    let cashFlowPositive: Bool
+}
+
+struct OptimalPriceResult {
+    let foundOptimal: Bool
+    let optimalPrice: Double
+    let message: String
+}
+
+// MARK: - Deal Optimizer Components
+
+struct OptimizerMetricCard: View {
+    let title: String
+    let value: String
+    let target: String
+    let meetsTarget: Bool
+    let background: Color
+    
+    private var statusColor: Color {
+        meetsTarget ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+            }
+            
+            Text(value)
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .foregroundStyle(.primary)
+            
+            Text("Target: \(target)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(statusColor.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+struct SecondaryMetricPill: View {
+    let title: String
+    let value: String
+    let background: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+struct OptimizerSlider: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let format: SliderFormat
+    var subtitle: String? = nil
+    let accentColor: Color
+    
+    enum SliderFormat {
+        case currency
+        case percent
+    }
+    
+    private var displayValue: String {
+        switch format {
+        case .currency:
+            return value.asCompactCurrency
+        case .percent:
+            return (value * 100).formatted(decimals: 2) + "%"
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                
+                Spacer()
+                
+                Text(displayValue)
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(accentColor)
+            }
+            
+            Slider(value: $value, in: range, step: step) { editing in
+                if editing {
+                    HapticManager.shared.slider()
+                }
+            }
+            .tint(accentColor)
+        }
     }
 }
 
