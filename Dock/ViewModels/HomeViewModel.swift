@@ -27,6 +27,11 @@ final class HomeViewModel {
     var showingFolderSheet: Bool = false
     var selectedProperty: Property?
     
+    // Market Rates
+    var currentRates: RateData?
+    var marketRateItems: [MarketRateItem] = []
+    var isLoadingRates: Bool = false
+    
     // MARK: - Filter & Sort
     
     enum SortOption: String, CaseIterable, Identifiable {
@@ -95,6 +100,7 @@ final class HomeViewModel {
         return capRates.reduce(0, +) / Double(capRates.count)
     }
     
+    
     // MARK: - Dependencies
     
     private let viewContext: NSManagedObjectContext
@@ -116,6 +122,23 @@ final class HomeViewModel {
         
         await loadProperties()
         await loadFolders()
+        await loadRates()
+    }
+    
+    func loadRates() async {
+        isLoadingRates = true
+        defer { isLoadingRates = false }
+        
+        do {
+            let rates = try await RateService.shared.fetchCurrentRates()
+            currentRates = rates
+            marketRateItems = rates.toMarketRateItems()
+        } catch {
+            // Use fallback rates if fetch fails
+            let fallback = RateData.fallbackRates
+            currentRates = fallback
+            marketRateItems = fallback.toMarketRateItems()
+        }
     }
     
     private func loadProperties() async {

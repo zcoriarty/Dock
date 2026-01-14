@@ -85,6 +85,18 @@ struct NotesView: View {
         .sheet(isPresented: $showingTagManager) {
             TagManagerSheet(viewModel: viewModel)
         }
+        .sheet(item: $viewModel.editingNote) { note in
+            EditNoteSheet(
+                viewModel: viewModel,
+                note: note,
+                onSave: { updatedNote in
+                    Task {
+                        await viewModel.updateNote(updatedNote)
+                        viewModel.editingNote = nil
+                    }
+                }
+            )
+        }
     }
     
     // MARK: - Area Filter
@@ -708,6 +720,200 @@ struct AddNoteSheet: View {
             }
             .onAppear {
                 isContentFocused = true
+            }
+        }
+    }
+}
+
+// MARK: - Edit Note Sheet
+
+struct EditNoteSheet: View {
+    var viewModel: NotesViewModel
+    let note: PropertyNote
+    let onSave: (PropertyNote) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var isContentFocused: Bool
+    
+    @State private var selectedArea: PropertyArea?
+    @State private var selectedTagIDs: Set<UUID>
+    @State private var content: String
+    
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
+    }
+    
+    init(viewModel: NotesViewModel, note: PropertyNote, onSave: @escaping (PropertyNote) -> Void) {
+        self.viewModel = viewModel
+        self.note = note
+        self.onSave = onSave
+        
+        // Initialize state with existing note values
+        _selectedArea = State(initialValue: PropertyArea(rawValue: note.areaName))
+        _selectedTagIDs = State(initialValue: Set(note.tagIDs))
+        _content = State(initialValue: note.content)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Area picker
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Area")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(PropertyAreaCategory.allCases, id: \.self) { category in
+                                    Menu {
+                                        ForEach(category.areas) { area in
+                                            Button {
+                                                selectedArea = area
+                                            } label: {
+                                                Label(area.rawValue, systemImage: area.icon)
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Text(category.rawValue)
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                            
+                                            Image(systemName: "chevron.down")
+                                                .font(.caption2)
+                                        }
+                                        .foregroundStyle(.primary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(cardBackground)
+                                        .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if let area = selectedArea {
+                            HStack(spacing: 6) {
+                                Image(systemName: area.icon)
+                                    .font(.caption)
+                                Text(area.rawValue)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                
+                                Spacer()
+                                
+                                Button {
+                                    selectedArea = nil
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.caption2)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(10)
+                            .background(Color.primary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // Tags
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Tags")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        if viewModel.availableTags.isEmpty {
+                            Text("No tags available")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .padding(.vertical, 8)
+                        } else {
+                            FlowLayout(spacing: 8) {
+                                ForEach(viewModel.availableTags) { tag in
+                                    SelectableTagChip(
+                                        tag: tag,
+                                        isSelected: selectedTagIDs.contains(tag.id)
+                                    ) {
+                                        if selectedTagIDs.contains(tag.id) {
+                                            selectedTagIDs.remove(tag.id)
+                                        } else {
+                                            selectedTagIDs.insert(tag.id)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // Content
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Note")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        TextEditor(text: $content)
+                            .focused($isContentFocused)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 140)
+                            .padding(12)
+                            .background(cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // Media section (if note has media)
+                    if !note.media.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Media")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(note.media) { media in
+                                        ModernMediaThumbnail(media: media) { }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                }
+                .padding(.vertical, 24)
+            }
+            .background(backgroundColor.ignoresSafeArea())
+            .navigationTitle("Edit Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        var updatedNote = note
+                        updatedNote.areaName = selectedArea?.rawValue ?? ""
+                        updatedNote.content = content
+                        updatedNote.tagIDs = Array(selectedTagIDs)
+                        onSave(updatedNote)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(content.isEmpty)
+                }
             }
         }
     }

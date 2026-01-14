@@ -2,16 +2,18 @@
 //  HomeView.swift
 //  Dock
 //
-//  Main home screen with property list
+//  Main home screen with property list and market rates
 //
 
 import SwiftUI
+import Charts
 
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
     @State private var showingAddProperty = false
     @State private var selectedProperty: Property?
     @State private var showingFilters = false
+    @State private var showingSearch = false
     @Environment(\.colorScheme) private var colorScheme
     @Namespace private var namespace
     
@@ -30,71 +32,108 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background
                 backgroundColor
                     .ignoresSafeArea()
                 
                 if viewModel.properties.isEmpty && !viewModel.isLoading {
-                    emptyState
+                    VStack(spacing: 0) {
+                        // Auto-scrolling rates bar
+                        if !viewModel.marketRateItems.isEmpty {
+                            ratesAutoScrollView
+                                .frame(height: 50)
+                        }
+                        emptyState
+                    }
                 } else {
-                    mainContent
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            // Auto-scrolling rates bar
+                            if !viewModel.marketRateItems.isEmpty {
+                                ratesAutoScrollView
+                                    .frame(height: 50)
+                            }
+                            
+                            // Main Content
+                            mainContent
+                        }
+                    }
+                    .refreshable {
+                        await viewModel.loadData()
+                    }
                 }
             }
-            .navigationTitle("\(viewModel.properties.count) \(viewModel.properties.count == 1 ? "Property" : "Properties")")
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $viewModel.searchText, prompt: "Search properties")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        ForEach(HomeViewModel.SortOption.allCases) { option in
-                            Button {
-                                withAnimation {
-                                    viewModel.sortOption = option
-                                    storedSortOption = option.rawValue
-                                }
-                                Task { @MainActor in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(viewModel.properties.count) \(viewModel.properties.count == 1 ? "Property" : "Properties")")
+                            .font(.title2)
+                            .fontWeight(.bold)
+
+                        
+                        Text(Date.now, style: .date)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+
+                    }
+                    .fixedSize(horizontal: true, vertical: true)
+
+                }
+                .sharedBackgroundVisibility(.hidden)
+
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 16) {
+                        Button {
+                            showingSearch = true
+                            HapticManager.shared.impact(.light)
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        
+                        Menu {
+                            ForEach(HomeViewModel.SortOption.allCases) { option in
+                                Button {
+                                    withAnimation {
+                                        viewModel.sortOption = option
+                                        storedSortOption = option.rawValue
+                                    }
                                     HapticManager.shared.selection()
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: option.icon)
-                                    Text(option.rawValue)
-                                    if viewModel.sortOption == option {
-                                        Image(systemName: viewModel.sortAscending ? "arrow.up" : "arrow.down")
+                                } label: {
+                                    HStack {
+                                        Image(systemName: option.icon)
+                                        Text(option.rawValue)
+                                        if viewModel.sortOption == option {
+                                            Image(systemName: viewModel.sortAscending ? "arrow.up" : "arrow.down")
+                                        }
                                     }
                                 }
                             }
-                        }
-                        
-                        Divider()
-                        
-                        Button {
-                            withAnimation {
-                                viewModel.sortAscending.toggle()
-                                storedSortAscending = viewModel.sortAscending
+                            
+                            Divider()
+                            
+                            Button {
+                                withAnimation {
+                                    viewModel.sortAscending.toggle()
+                                    storedSortAscending = viewModel.sortAscending
+                                }
+                            } label: {
+                                Label(
+                                    viewModel.sortAscending ? "Descending" : "Ascending",
+                                    systemImage: viewModel.sortAscending ? "arrow.down" : "arrow.up"
+                                )
                             }
                         } label: {
-                            Label(
-                                viewModel.sortAscending ? "Descending" : "Ascending",
-                                systemImage: viewModel.sortAscending ? "arrow.down" : "arrow.up"
-                            )
+                            Image(systemName: "arrow.up.arrow.down")
                         }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down.circle")
-                            .fontWeight(.medium)
-                            .symbolVariant(viewModel.sortOption != .score ? .fill : .none)
-                    }
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingAddProperty = true
-                        Task { @MainActor in
+                        
+                        Button {
+                            showingAddProperty = true
                             HapticManager.shared.impact(.medium)
+                        } label: {
+                            Image(systemName: "plus")
                         }
-                    } label: {
-                        Image(systemName: "plus")
-                            .fontWeight(.semibold)
                     }
                 }
             }
@@ -116,9 +155,6 @@ struct HomeView: View {
                 )
                 .navigationTransition(.zoom(sourceID: property.id, in: namespace))
             }
-            .refreshable {
-                await viewModel.loadData()
-            }
             .onAppear {
                 // Load persisted sort preferences
                 if let option = HomeViewModel.SortOption(rawValue: storedSortOption) {
@@ -127,23 +163,38 @@ struct HomeView: View {
                 viewModel.sortAscending = storedSortAscending
             }
         }
+        .searchable(text: $viewModel.searchText, isPresented: $showingSearch, prompt: "Search properties")
+    }
+    
+    // MARK: - Rates Auto Scroll View
+    
+    @ViewBuilder
+    private var ratesAutoScrollView: some View {
+        if viewModel.marketRateItems.count > 0 {
+            LoopingScrollView(
+                spacing: 15,
+                scrollingSpeed: 0.5,
+                itemWidth: 160,
+                data: viewModel.marketRateItems
+            ) { item, isRepeated in
+                RateItemView(item: item, showChart: true)
+            }
+        }
     }
     
     // MARK: - Main Content
     
     private var mainContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 20) {
-                // Folders
-                if !viewModel.folders.isEmpty {
-                    foldersSection
-                }
-                
-                // Properties
-                propertyCards
+        LazyVStack(spacing: 20) {
+            // Folders
+            if !viewModel.folders.isEmpty {
+                foldersSection
             }
-            .padding(.vertical, 16)
+            
+            // Properties
+            propertyCards
         }
+        .padding(.vertical, 8)
     }
     
     // MARK: - Folders Section
@@ -233,19 +284,19 @@ struct HomeView: View {
                 .matchedTransitionSource(id: property.id, in: namespace)
                 .onTapGesture {
                     selectedProperty = property
-                    Task { @MainActor in
-                        HapticManager.shared.impact(.light)
-                    }
+                    HapticManager.shared.impact(.light)
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal)
     }
     
     // MARK: - Empty State
     
     private var emptyState: some View {
         VStack(spacing: 32) {
+            Spacer()
+            
             VStack(spacing: 16) {
                 Circle()
                     .fill(cardBackground)
@@ -280,6 +331,70 @@ struct HomeView: View {
                     .background(Color.primary)
                     .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
                     .clipShape(Capsule())
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Rate Item View
+
+struct RateItemView: View {
+    let item: MarketRateItem
+    var showChart: Bool = false
+    
+    private var chartColor: Color {
+        item.changePercent == 0 ? .secondary : item.changeColor
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.name)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                
+                Text(item.value)
+                    .font(.system(size: 17))
+                    .fontWeight(.bold)
+                
+                // Only show change row if not neutral
+                if item.changePercent != 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: item.changeIcon)
+                            .font(.caption2)
+                        Text(item.change)
+                            .font(.caption)
+                    }
+                    .fontWeight(.medium)
+                    .foregroundStyle(item.changeColor)
+                }
+            }
+            
+            if showChart && item.historicalData.count > 1 {
+                Chart {
+                    ForEach(0..<item.historicalData.count, id: \.self) { index in
+                        let point = item.historicalData[index]
+                        
+                        LineMark(
+                            x: .value("X", index),
+                            y: .value("Y", point)
+                        )
+                        .foregroundStyle(chartColor)
+                        
+                        AreaMark(
+                            x: .value("X", index),
+                            y: .value("Y", point)
+                        )
+                        .foregroundStyle(chartColor.opacity(0.2))
+                    }
+                }
+                .chartLegend(.hidden)
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .frame(maxWidth: 50, maxHeight: 20)
             }
         }
     }
