@@ -118,9 +118,14 @@ final class PropertyDetailViewModel {
             let propertyData = try await propertyService.fetchPropertyByAddress(fullAddress)
             
             // Update photo URLs and listing URL from fresh data
-            property.photoURLs = propertyData.photoURLs
-            if property.listingURL == nil {
-                property.listingURL = propertyData.listingURL
+            var didUpdate = false
+            if property.photoURLs != propertyData.photoURLs {
+                property.photoURLs = propertyData.photoURLs
+                didUpdate = true
+            }
+            if property.listingURL == nil, let listingURL = propertyData.listingURL {
+                property.listingURL = listingURL
+                didUpdate = true
             }
             
             // Download the photo
@@ -130,9 +135,15 @@ final class PropertyDetailViewModel {
                 print("📸 Downloading photo from: \(photoURLString)")
                 let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
                 property.primaryPhotoData = imageData
+                didUpdate = true
                 print("📸 Photo downloaded successfully (\(imageData.count) bytes)")
             } else {
                 print("⚠️ No photo URL available from API")
+            }
+            
+            if didUpdate {
+                property.updatedAt = Date()
+                await onSave?(property)
             }
         } catch {
             print("⚠️ Could not refresh property data: \(error.localizedDescription)")

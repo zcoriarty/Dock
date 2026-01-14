@@ -33,9 +33,9 @@ extension Double {
         }
     }
     
-    /// Format as percentage
+    /// Format as percentage (value stored as decimal, e.g. 0.07 = 7%)
     func asPercent(decimals: Int = 2) -> String {
-        String(format: "%.\(decimals)f%%", self)
+        String(format: "%.\(decimals)f%%", self * 100)
     }
     
     /// Format with comma separators

@@ -25,6 +25,163 @@ struct PropertyDetailView: View {
         colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
     }
     
+    private struct CapexReserveDetails {
+        let baseReserve: Double
+        let ageMultiplier: Double
+    }
+    
+    private var purchasePriceUsed: Double {
+        let financing = viewModel.property.financing
+        return financing.purchasePrice > 0 ? financing.purchasePrice : viewModel.property.askingPrice
+    }
+    
+    private var loanAmountUsed: Double {
+        let financing = viewModel.property.financing
+        return financing.loanAmount > 0 ? financing.loanAmount : purchasePriceUsed * financing.ltv
+    }
+    
+    private var totalCashRequiredUsed: Double {
+        let financing = viewModel.property.financing
+        let totalCash = financing.totalCashRequired
+        if totalCash > 0 {
+            return totalCash
+        }
+        return (purchasePriceUsed - loanAmountUsed) + financing.closingCosts
+    }
+    
+    private var monthlyRentUsed: Double {
+        let property = viewModel.property
+        return property.estimatedTotalRent > 0
+        ? property.estimatedTotalRent
+        : property.estimatedRentPerUnit * Double(property.unitCount)
+    }
+    
+    private var capexReserveDetails: CapexReserveDetails {
+        let age = Calendar.current.component(.year, from: Date()) - viewModel.property.yearBuilt
+        let baseReserve: Double = 300
+        let ageMultiplier: Double = {
+            switch age {
+            case 0...10: return 0.75
+            case 11...20: return 1.0
+            case 21...30: return 1.25
+            case 31...50: return 1.5
+            default: return 2.0
+            }
+        }()
+        return CapexReserveDetails(baseReserve: baseReserve, ageMultiplier: ageMultiplier)
+    }
+    
+    private func calculationDetail(title: String, equation: String, variables: [(String, String)]) -> CalculationDetail {
+        CalculationDetail(
+            title: title,
+            equation: equation,
+            variables: variables.map { CalculationVariable(name: $0.0, value: $0.1) }
+        )
+    }
+    
+    private func metricDetail(for metric: ScoredMetric) -> CalculationDetail? {
+        let economics = viewModel.metrics.dealEconomics
+        let risk = viewModel.metrics.riskBuffers
+        let downPayment = max(purchasePriceUsed - loanAmountUsed, 0)
+        let fixedCosts = economics.expenseBreakdown.taxes
+        + economics.expenseBreakdown.insurance
+        + economics.annualDebtService
+        let variableCostPercent = economics.expenseBreakdown.management / max(economics.effectiveGrossIncome, 1)
+        
+        switch metric.name {
+        case "Cap Rate":
+            return calculationDetail(
+                title: "Cap Rate",
+                equation: "Cap Rate = NOI / Purchase Price",
+                variables: [
+                    ("NOI", economics.netOperatingIncome.asCurrency),
+                    ("Purchase Price", purchasePriceUsed.asCurrency),
+                    ("Cap Rate", economics.inPlaceCapRate.asPercent())
+                ]
+            )
+        case "Cash-on-Cash":
+            return calculationDetail(
+                title: "Cash-on-Cash",
+                equation: "Cash-on-Cash = Annual Cash Flow / Total Cash Required",
+                variables: [
+                    ("Annual Cash Flow", economics.annualCashFlow.asCurrency),
+                    ("Down Payment", downPayment.asCurrency),
+                    ("Closing Costs", viewModel.property.financing.closingCosts.asCurrency),
+                    ("Total Cash Required", totalCashRequiredUsed.asCurrency),
+                    ("Cash-on-Cash", economics.cashOnCashReturn.asPercent())
+                ]
+            )
+        case "DSCR":
+            return calculationDetail(
+                title: "DSCR",
+                equation: "DSCR = NOI / Annual Debt Service",
+                variables: [
+                    ("NOI", economics.netOperatingIncome.asCurrency),
+                    ("Annual Debt Service", economics.annualDebtService.asCurrency),
+                    ("DSCR", String(format: "%.2fx", economics.dscr))
+                ]
+            )
+        case "NOI":
+            return calculationDetail(
+                title: "NOI",
+                equation: "NOI = EGI - Total Operating Expenses",
+                variables: [
+                    ("EGI", economics.effectiveGrossIncome.asCurrency),
+                    ("Total Expenses", economics.totalOperatingExpenses.asCurrency),
+                    ("NOI", economics.netOperatingIncome.asCurrency)
+                ]
+            )
+        case "Break-even Occupancy":
+            return calculationDetail(
+                title: "Break-even Occupancy",
+                equation: "Break-even = Fixed Costs / (GPR × (1 - Variable Costs %))",
+                variables: [
+                    ("Fixed Costs", fixedCosts.asCurrency),
+                    ("GPR", economics.grossPotentialRent.asCurrency),
+                    ("Variable Costs %", variableCostPercent.asPercent()),
+                    ("Break-even", risk.breakEvenOccupancy.asPercent())
+                ]
+            )
+        case "Worst Case Cash Flow":
+            return calculationDetail(
+                title: "Worst Case Cash Flow",
+                equation: "Worst Case = Rent -10%, Vacancy +5%, Repairs +10%",
+                variables: [
+                    ("Assumed Rent", (monthlyRentUsed * 0.90).asCurrency),
+                    ("Vacancy Rate", min(viewModel.property.vacancyRate + 0.05, 0.25).asPercent()),
+                    ("Repairs per Unit", (viewModel.property.repairsPerUnit * 1.10).asCurrency),
+                    ("Annual Cash Flow", risk.stressTestResults.worstCaseCashFlow.asCurrency)
+                ]
+            )
+        default:
+            return calculationDetail(
+                title: metric.name,
+                equation: "Market data (no internal calculation)",
+                variables: [
+                    ("Value", metric.displayValue),
+                    ("Source", "Market data")
+                ]
+            )
+        }
+    }
+    
+    private var placeholderImage: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [Color.primary.opacity(0.1), Color.primary.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 100, height: 100)
+            .overlay {
+                Image(systemName: "photo")
+                    .font(.title2)
+                    .foregroundStyle(.tertiary)
+            }
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -99,54 +256,64 @@ struct PropertyDetailView: View {
     
     // MARK: - Property Header
     
-    private var propertyHeader: some View {
-        VStack(spacing: 0) {
-            // Photo section
-            if let photoData = viewModel.property.primaryPhotoData,
-               let uiImage = UIImage(data: photoData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 220)
-                    .clipped()
-            } else if let firstURL = viewModel.property.photoURLs.first,
-                      let url = URL(string: firstURL) {
-                // Fallback to AsyncImage if we have a URL
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(height: 220)
-                            .clipped()
-                    case .failure:
-                        EmptyView()
-                    case .empty:
-                        ProgressView()
-                            .frame(height: 220)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.primary.opacity(0.05))
-                    @unknown default:
-                        EmptyView()
-                    }
+    @ViewBuilder
+    private var propertyThumbnail: some View {
+        if let photoData = viewModel.property.primaryPhotoData,
+           let uiImage = UIImage(data: photoData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 100, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else if let firstURL = viewModel.property.photoURLs.first,
+                  let url = URL(string: firstURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 100, height: 100)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                case .failure:
+                    placeholderImage
+                case .empty:
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                        .frame(width: 100, height: 100)
+                        .overlay {
+                            ProgressView()
+                        }
+                @unknown default:
+                    placeholderImage
                 }
             }
-            
-            // Property info
+        } else {
+            placeholderImage
+        }
+    }
+    
+    private var propertyHeader: some View {
+        VStack(spacing: 0) {
+            // Property info with image
             VStack(alignment: .leading, spacing: 16) {
-                // Price and score row
-                HStack(alignment: .top) {
+                // Image + Price/Address row
+                HStack(alignment: .top, spacing: 16) {
+                    // Small square image
+                    propertyThumbnail
+                    
+                    // Price and address
                     VStack(alignment: .leading, spacing: 4) {
                         Text(viewModel.property.askingPrice.asCompactCurrency)
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
                         
                         Text(viewModel.property.address)
-                            .font(.body)
+                            .font(.subheadline)
                             .foregroundStyle(.primary)
+                            .lineLimit(2)
                         
                         Text("\(viewModel.property.city), \(viewModel.property.state) \(viewModel.property.zipCode)")
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                         
                         // View Listing Link
@@ -156,25 +323,19 @@ struct PropertyDetailView: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "arrow.up.right.square")
-                                        .font(.caption)
+                                        .font(.caption2)
                                     Text("View on \(viewModel.property.listingSource ?? "Zillow")")
-                                        .font(.caption)
+                                        .font(.caption2)
                                         .fontWeight(.medium)
                                 }
                                 .foregroundStyle(.blue)
                             }
                             .buttonStyle(.plain)
-                            .padding(.top, 4)
+                            .padding(.top, 2)
                         }
                     }
                     
-                    Spacer()
-                    
-                    // Score circle
-                    ModernScoreBadge(
-                        score: viewModel.metrics.overallScore,
-                        recommendation: viewModel.metrics.recommendation
-                    )
+                    Spacer(minLength: 0)
                 }
                 
                 // Quick stats
@@ -183,24 +344,31 @@ struct PropertyDetailView: View {
                     
                     Divider()
                         .frame(height: 32)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 12)
                     
                     QuickStat(value: String(format: "%.1f", viewModel.property.bathrooms), label: "Baths")
                     
                     Divider()
                         .frame(height: 32)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 12)
                     
                     QuickStat(value: viewModel.property.squareFeet.withCommas, label: "Sq Ft")
                     
                     Divider()
                         .frame(height: 32)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 12)
                     
                     QuickStat(value: "\(viewModel.property.yearBuilt)", label: "Built")
                     
                     Spacer()
                 }
+                .padding(.top, 4)
+                
+                // Horizontal score gauge
+                HorizontalScoreGauge(
+                    score: viewModel.metrics.overallScore,
+                    recommendation: viewModel.metrics.recommendation
+                )
                 .padding(.top, 8)
             }
             .padding(20)
@@ -284,7 +452,7 @@ struct PropertyDetailView: View {
                 
                 VStack(spacing: 0) {
                     ForEach(Array(viewModel.metrics.scoredMetrics.enumerated()), id: \.element.id) { index, metric in
-                        ModernMetricRow(metric: metric)
+                        ModernMetricRow(metric: metric, detail: metricDetail(for: metric))
                         
                         if index < viewModel.metrics.scoredMetrics.count - 1 {
                             Divider()
@@ -336,59 +504,244 @@ struct PropertyDetailView: View {
     }
     
     // MARK: - Economics Section
-    
+    @ViewBuilder
     private var economicsSection: some View {
+        let economics = viewModel.metrics.dealEconomics
+        let monthlyRent = monthlyRentUsed
+        let capexDetails = capexReserveDetails
+        
         VStack(spacing: 24) {
             // Income
             ModernSection(title: "Income", background: cardBackground) {
                 VStack(spacing: 0) {
-                    ModernEconomicsRow(title: "Gross Potential Rent", value: viewModel.metrics.dealEconomics.grossPotentialRent.asCurrency)
+                    ModernEconomicsRow(
+                        title: "Gross Potential Rent",
+                        value: economics.grossPotentialRent.asCurrency,
+                        detail: calculationDetail(
+                            title: "Gross Potential Rent",
+                            equation: "GPR = Monthly Rent × 12",
+                            variables: [
+                                ("Monthly Rent", monthlyRent.asCurrency),
+                                ("Annualization", "12 months"),
+                                ("GPR", economics.grossPotentialRent.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Vacancy Loss", value: "-\(viewModel.metrics.dealEconomics.vacancyLoss.asCurrency)", valueColor: .red.opacity(0.8))
+                    ModernEconomicsRow(
+                        title: "Vacancy Loss",
+                        value: "-\(economics.vacancyLoss.asCurrency)",
+                        valueColor: .red.opacity(0.8),
+                        detail: calculationDetail(
+                            title: "Vacancy Loss",
+                            equation: "Vacancy Loss = GPR × Vacancy Rate",
+                            variables: [
+                                ("GPR", economics.grossPotentialRent.asCurrency),
+                                ("Vacancy Rate", viewModel.property.vacancyRate.asPercent()),
+                                ("Vacancy Loss", economics.vacancyLoss.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Effective Gross Income", value: viewModel.metrics.dealEconomics.effectiveGrossIncome.asCurrency, isHighlighted: true)
+                    ModernEconomicsRow(
+                        title: "Effective Gross Income",
+                        value: economics.effectiveGrossIncome.asCurrency,
+                        isHighlighted: true,
+                        detail: calculationDetail(
+                            title: "Effective Gross Income",
+                            equation: "EGI = GPR - Vacancy Loss",
+                            variables: [
+                                ("GPR", economics.grossPotentialRent.asCurrency),
+                                ("Vacancy Loss", economics.vacancyLoss.asCurrency),
+                                ("EGI", economics.effectiveGrossIncome.asCurrency)
+                            ]
+                        )
+                    )
                 }
             }
             
             // Expenses
             ModernSection(title: "Operating Expenses", background: cardBackground) {
                 VStack(spacing: 0) {
-                    ModernEconomicsRow(title: "Property Taxes", value: viewModel.metrics.dealEconomics.expenseBreakdown.taxes.asCurrency)
+                    ModernEconomicsRow(
+                        title: "Property Taxes",
+                        value: economics.expenseBreakdown.taxes.asCurrency,
+                        detail: calculationDetail(
+                            title: "Property Taxes",
+                            equation: "Property Taxes = Annual Taxes (input)",
+                            variables: [
+                                ("Annual Taxes", viewModel.property.annualTaxes.asCurrency),
+                                ("Property Taxes", economics.expenseBreakdown.taxes.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Insurance", value: viewModel.metrics.dealEconomics.expenseBreakdown.insurance.asCurrency)
+                    ModernEconomicsRow(
+                        title: "Insurance",
+                        value: economics.expenseBreakdown.insurance.asCurrency,
+                        detail: calculationDetail(
+                            title: "Insurance",
+                            equation: "Insurance = Annual Insurance (input/estimate)",
+                            variables: [
+                                ("Annual Insurance", viewModel.property.insuranceAnnual.asCurrency),
+                                ("Insurance", economics.expenseBreakdown.insurance.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Management", value: viewModel.metrics.dealEconomics.expenseBreakdown.management.asCurrency)
+                    ModernEconomicsRow(
+                        title: "Management",
+                        value: economics.expenseBreakdown.management.asCurrency,
+                        detail: calculationDetail(
+                            title: "Management",
+                            equation: "Management = EGI × Management Fee %",
+                            variables: [
+                                ("EGI", economics.effectiveGrossIncome.asCurrency),
+                                ("Management Fee %", viewModel.property.managementFeePercent.asPercent()),
+                                ("Management", economics.expenseBreakdown.management.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Repairs/Maintenance", value: viewModel.metrics.dealEconomics.expenseBreakdown.repairs.asCurrency)
+                    ModernEconomicsRow(
+                        title: "Repairs/Maintenance",
+                        value: economics.expenseBreakdown.repairs.asCurrency,
+                        detail: calculationDetail(
+                            title: "Repairs/Maintenance",
+                            equation: "Repairs = Repairs per Unit × Units",
+                            variables: [
+                                ("Repairs per Unit", viewModel.property.repairsPerUnit.asCurrency),
+                                ("Units", "\(viewModel.property.unitCount)"),
+                                ("Repairs", economics.expenseBreakdown.repairs.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "CapEx Reserve", value: viewModel.metrics.dealEconomics.expenseBreakdown.capexReserve.asCurrency)
+                    ModernEconomicsRow(
+                        title: "CapEx Reserve",
+                        value: economics.expenseBreakdown.capexReserve.asCurrency,
+                        detail: calculationDetail(
+                            title: "CapEx Reserve",
+                            equation: "CapEx = Base Reserve × Age Multiplier × Units",
+                            variables: [
+                                ("Base Reserve", capexDetails.baseReserve.asCurrency),
+                                ("Age Multiplier", capexDetails.ageMultiplier.formatted(decimals: 2) + "x"),
+                                ("Units", "\(viewModel.property.unitCount)"),
+                                ("CapEx", economics.expenseBreakdown.capexReserve.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Other", value: viewModel.metrics.dealEconomics.expenseBreakdown.other.asCurrency)
+                    ModernEconomicsRow(
+                        title: "Other",
+                        value: economics.expenseBreakdown.other.asCurrency,
+                        detail: calculationDetail(
+                            title: "Other Expenses",
+                            equation: "Other = Other Expenses (input)",
+                            variables: [
+                                ("Other Expenses", viewModel.property.otherExpenses.asCurrency),
+                                ("Other", economics.expenseBreakdown.other.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Total Expenses", value: viewModel.metrics.dealEconomics.totalOperatingExpenses.asCurrency, isHighlighted: true)
+                    ModernEconomicsRow(
+                        title: "Total Expenses",
+                        value: economics.totalOperatingExpenses.asCurrency,
+                        isHighlighted: true,
+                        detail: calculationDetail(
+                            title: "Total Expenses",
+                            equation: "Total = Taxes + Insurance + Management + Repairs + CapEx + Utilities + Other",
+                            variables: [
+                                ("Taxes", economics.expenseBreakdown.taxes.asCurrency),
+                                ("Insurance", economics.expenseBreakdown.insurance.asCurrency),
+                                ("Management", economics.expenseBreakdown.management.asCurrency),
+                                ("Repairs", economics.expenseBreakdown.repairs.asCurrency),
+                                ("CapEx", economics.expenseBreakdown.capexReserve.asCurrency),
+                                ("Utilities", economics.expenseBreakdown.utilities.asCurrency),
+                                ("Other", economics.expenseBreakdown.other.asCurrency),
+                                ("Total", economics.totalOperatingExpenses.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Expense Ratio", value: viewModel.metrics.dealEconomics.expenseBreakdown.expenseRatio.asPercent(), isHighlighted: true)
+                    ModernEconomicsRow(
+                        title: "Expense Ratio",
+                        value: economics.expenseBreakdown.expenseRatio.asPercent(),
+                        isHighlighted: true,
+                        detail: calculationDetail(
+                            title: "Expense Ratio",
+                            equation: "Expense Ratio = Total Expenses / EGI",
+                            variables: [
+                                ("Total Expenses", economics.totalOperatingExpenses.asCurrency),
+                                ("EGI", economics.effectiveGrossIncome.asCurrency),
+                                ("Expense Ratio", economics.expenseBreakdown.expenseRatio.asPercent())
+                            ]
+                        )
+                    )
                 }
             }
             
             // Returns
             ModernSection(title: "Returns", background: cardBackground) {
                 VStack(spacing: 0) {
-                    ModernEconomicsRow(title: "Net Operating Income", value: viewModel.metrics.dealEconomics.netOperatingIncome.asCurrency, isHighlighted: true)
+                    ModernEconomicsRow(
+                        title: "Net Operating Income",
+                        value: economics.netOperatingIncome.asCurrency,
+                        isHighlighted: true,
+                        detail: calculationDetail(
+                            title: "Net Operating Income",
+                            equation: "NOI = EGI - Total Operating Expenses",
+                            variables: [
+                                ("EGI", economics.effectiveGrossIncome.asCurrency),
+                                ("Total Expenses", economics.totalOperatingExpenses.asCurrency),
+                                ("NOI", economics.netOperatingIncome.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
-                    ModernEconomicsRow(title: "Annual Debt Service", value: "-\(viewModel.metrics.dealEconomics.annualDebtService.asCurrency)")
+                    ModernEconomicsRow(
+                        title: "Annual Debt Service",
+                        value: "-\(economics.annualDebtService.asCurrency)",
+                        detail: calculationDetail(
+                            title: "Annual Debt Service",
+                            equation: "Annual Debt Service = Monthly Debt Service × 12",
+                            variables: [
+                                ("Monthly Debt Service", economics.monthlyDebtService.asCurrency),
+                                ("Annualization", "12 months"),
+                                ("Annual Debt Service", economics.annualDebtService.asCurrency)
+                            ]
+                        )
+                    )
                     Divider().padding(.leading, 16)
                     ModernEconomicsRow(
                         title: "Annual Cash Flow",
-                        value: viewModel.metrics.dealEconomics.annualCashFlow.asCurrency,
-                        valueColor: viewModel.metrics.dealEconomics.annualCashFlow >= 0 ? .green : .red,
-                        isHighlighted: true
+                        value: economics.annualCashFlow.asCurrency,
+                        isPositiveIndicator: economics.annualCashFlow >= 0,
+                        isHighlighted: true,
+                        detail: calculationDetail(
+                            title: "Annual Cash Flow",
+                            equation: "Annual Cash Flow = NOI - Annual Debt Service",
+                            variables: [
+                                ("NOI", economics.netOperatingIncome.asCurrency),
+                                ("Annual Debt Service", economics.annualDebtService.asCurrency),
+                                ("Annual Cash Flow", economics.annualCashFlow.asCurrency)
+                            ]
+                        )
                     )
                     Divider().padding(.leading, 16)
                     ModernEconomicsRow(
                         title: "Monthly Cash Flow",
-                        value: viewModel.metrics.dealEconomics.monthlyCashFlow.asCurrency,
-                        valueColor: viewModel.metrics.dealEconomics.monthlyCashFlow >= 0 ? .green : .red
+                        value: economics.monthlyCashFlow.asCurrency,
+                        isPositiveIndicator: economics.monthlyCashFlow >= 0,
+                        detail: calculationDetail(
+                            title: "Monthly Cash Flow",
+                            equation: "Monthly Cash Flow = Annual Cash Flow ÷ 12",
+                            variables: [
+                                ("Annual Cash Flow", economics.annualCashFlow.asCurrency),
+                                ("Monthly Cash Flow", economics.monthlyCashFlow.asCurrency)
+                            ]
+                        )
                     )
                 }
             }
@@ -474,9 +827,17 @@ struct PropertyDetailView: View {
                         
                         Spacer()
                         
-                        Text(viewModel.metrics.riskBuffers.breakEvenOccupancy.asPercent())
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                            .foregroundStyle(viewModel.metrics.riskBuffers.breakEvenOccupancy <= 0.85 ? .green : .orange)
+                        HStack(spacing: 8) {
+                            Text(viewModel.metrics.riskBuffers.breakEvenOccupancy.asPercent())
+                                .font(.system(.title2, design: .rounded, weight: .bold))
+                                .foregroundStyle(.primary)
+                            
+                            Circle()
+                                .fill(viewModel.metrics.riskBuffers.breakEvenOccupancy <= 0.85 
+                                      ? Color(red: 0.2, green: 0.7, blue: 0.4) 
+                                      : Color(red: 1.0, green: 0.6, blue: 0.2))
+                                .frame(width: 12, height: 12)
+                        }
                     }
                     
                     // Progress bar
@@ -619,11 +980,78 @@ struct ModernScoreBadge: View {
     }
 }
 
+struct HorizontalScoreGauge: View {
+    let score: Double
+    let recommendation: InvestmentRecommendation
+    
+    private var gaugeGradient: LinearGradient {
+        let baseColor: Color = {
+            switch score {
+            case 0..<40:
+                return Color(red: 0.9, green: 0.3, blue: 0.3)
+            case 40..<60:
+                return Color(red: 1.0, green: 0.6, blue: 0.2)
+            case 60..<75:
+                return Color(red: 0.95, green: 0.75, blue: 0.2)
+            default:
+                return Color(red: 0.2, green: 0.7, blue: 0.4)
+            }
+        }()
+        
+        return LinearGradient(
+            colors: [baseColor.opacity(0.6), baseColor],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Score label
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(Int(score))")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                
+                Text("/ 100")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.tertiary)
+                
+                Spacer()
+                
+                Text(recommendation.rawValue)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(recommendation.color)
+            }
+            
+            // Gauge bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Background
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.primary.opacity(0.08))
+                    
+                    // Filled portion
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(gaugeGradient)
+                        .frame(width: geo.size.width * (score / 100))
+                }
+            }
+            .frame(height: 10)
+        }
+    }
+}
+
 struct HeroMetricCard: View {
     let title: String
     let value: String
     let isPositive: Bool
     let background: Color
+    
+    private var statusColor: Color {
+        isPositive ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -631,9 +1059,15 @@ struct HeroMetricCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             
-            Text(value)
-                .font(.system(.title2, design: .rounded, weight: .bold))
-                .foregroundStyle(isPositive ? .green : .red)
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
+                
+                Text(value)
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(.primary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -644,38 +1078,55 @@ struct HeroMetricCard: View {
 
 struct ModernMetricRow: View {
     let metric: ScoredMetric
+    let detail: CalculationDetail?
+    @State private var isExpanded: Bool = false
     
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(metric.name)
-                    .font(.subheadline)
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(metric.name)
+                        .font(.subheadline)
+                    
+                    Text("Target: \(metric.displayThreshold)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
                 
-                Text("Target: \(metric.displayThreshold)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Spacer()
+                
+                HStack(spacing: 8) {
+                    Text(metric.displayValue)
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(.primary)
+                    
+                    Circle()
+                        .fill(metric.score.color)
+                        .frame(width: 10, height: 10)
+                    
+                    if detail != nil {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard detail != nil else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
             }
             
-            Spacer()
-            
-            HStack(spacing: 8) {
-                Text(metric.displayValue)
-                    .font(.system(.body, design: .rounded, weight: .medium))
-                    .foregroundStyle(metric.score.color)
-                
-                Circle()
-                    .fill(metric.score.color.opacity(0.15))
-                    .frame(width: 24, height: 24)
-                    .overlay {
-                        Image(systemName: metric.score.icon)
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(metric.score.color)
-                    }
+            if let detail, isExpanded {
+                CalculationDetailView(detail: detail)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
     }
 }
 
@@ -703,23 +1154,109 @@ struct ModernEconomicsRow: View {
     let title: String
     let value: String
     var valueColor: Color? = nil
+    var isPositiveIndicator: Bool? = nil
     var isHighlighted: Bool = false
+    var detail: CalculationDetail? = nil
+    @State private var isExpanded: Bool = false
+    
+    private var indicatorColor: Color? {
+        guard let isPositive = isPositiveIndicator else { return nil }
+        return isPositive 
+            ? Color(red: 0.2, green: 0.7, blue: 0.4) 
+            : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
     
     var body: some View {
-        HStack {
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(isHighlighted ? .medium : .regular)
+        VStack(spacing: 0) {
+            HStack {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(isHighlighted ? .medium : .regular)
+                
+                Spacer()
+                
+                HStack(spacing: 6) {
+                    Text(value)
+                        .font(.system(.subheadline, design: .rounded, weight: isHighlighted ? .semibold : .medium))
+                        .foregroundStyle(.primary)
+                    
+                    if let color = indicatorColor {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 10, height: 10)
+                    }
+                    
+                    if detail != nil {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isHighlighted ? Color.primary.opacity(0.03) : Color.clear)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard detail != nil else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }
             
-            Spacer()
-            
-            Text(value)
-                .font(.system(.subheadline, design: .rounded, weight: isHighlighted ? .semibold : .medium))
-                .foregroundStyle(valueColor ?? .primary)
+            if let detail, isExpanded {
+                CalculationDetailView(detail: detail)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(isHighlighted ? Color.primary.opacity(0.03) : Color.clear)
+    }
+}
+
+struct CalculationDetail: Identifiable {
+    let id = UUID()
+    let title: String
+    let equation: String
+    let variables: [CalculationVariable]
+}
+
+struct CalculationVariable: Identifiable {
+    let id = UUID()
+    let name: String
+    let value: String
+}
+
+struct CalculationDetailView: View {
+    let detail: CalculationDetail
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Calculation")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+            
+            Text(detail.equation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            ForEach(detail.variables) { variable in
+                HStack {
+                    Text(variable.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(variable.value)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -771,6 +1308,10 @@ struct ModernStressRow: View {
     let value: String
     let isPositive: Bool
     
+    private var statusColor: Color {
+        isPositive ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
+    
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -784,9 +1325,15 @@ struct ModernStressRow: View {
             
             Spacer()
             
-            Text(value)
-                .font(.system(.body, design: .rounded, weight: .semibold))
-                .foregroundStyle(isPositive ? .green : .red)
+            HStack(spacing: 8) {
+                Text(value)
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.primary)
+                
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
+            }
         }
     }
 }
@@ -854,6 +1401,10 @@ struct StressTestRow: View {
     let value: String
     let isPositive: Bool
     
+    private var statusColor: Color {
+        isPositive ? Color(red: 0.2, green: 0.7, blue: 0.4) : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
+    
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -867,9 +1418,15 @@ struct StressTestRow: View {
             
             Spacer()
             
-            Text(value)
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .foregroundStyle(isPositive ? .green : .red)
+            HStack(spacing: 8) {
+                Text(value)
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .foregroundStyle(.primary)
+                
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
+            }
         }
     }
 }
@@ -1106,6 +1663,12 @@ struct SensitivitySheet: View {
 struct SensitivityDetailRow: View {
     let result: SensitivityResult
     
+    private var statusColor: Color {
+        result.deltaFromBase >= 0 
+            ? Color(red: 0.2, green: 0.7, blue: 0.4) 
+            : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
+    
     var body: some View {
         VStack(spacing: 10) {
             HStack {
@@ -1115,13 +1678,17 @@ struct SensitivityDetailRow: View {
                 
                 Spacer()
                 
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Image(systemName: result.deltaFromBase >= 0 ? "arrow.up" : "arrow.down")
                         .font(.caption2)
+                        .foregroundStyle(statusColor)
                     Text(abs(result.deltaFromBase).asCurrency)
                         .font(.caption)
+                        .foregroundStyle(.primary)
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
                 }
-                .foregroundStyle(result.deltaFromBase >= 0 ? .green : .red)
             }
             
             HStack {

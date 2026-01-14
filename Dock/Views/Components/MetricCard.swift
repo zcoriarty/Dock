@@ -224,6 +224,12 @@ struct SensitivityRow: View {
     let result: SensitivityResult
     let baseValue: Double
     
+    private var statusColor: Color {
+        result.deltaFromBase >= 0 
+            ? Color(red: 0.2, green: 0.7, blue: 0.4) 
+            : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
+    
     var body: some View {
         HStack {
             Text(result.label)
@@ -231,18 +237,25 @@ struct SensitivityRow: View {
             
             Spacer()
             
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(result.cashFlow.asCurrency)
-                    .font(.system(.body, design: .rounded, weight: .medium))
-                    .foregroundStyle(result.cashFlow >= 0 ? .primary : Color.red)
-                
-                HStack(spacing: 2) {
-                    Image(systemName: result.deltaFromBase >= 0 ? "arrow.up" : "arrow.down")
-                        .font(.caption2)
-                    Text(abs(result.deltaFromBase).asCurrency)
-                        .font(.caption2)
+            HStack(spacing: 8) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(result.cashFlow.asCurrency)
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(.primary)
+                    
+                    HStack(spacing: 2) {
+                        Image(systemName: result.deltaFromBase >= 0 ? "arrow.up" : "arrow.down")
+                            .font(.caption2)
+                            .foregroundStyle(statusColor)
+                        Text(abs(result.deltaFromBase).asCurrency)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .foregroundStyle(result.deltaFromBase >= 0 ? .green : .red)
+                
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
             }
         }
         .padding(.vertical, 6)

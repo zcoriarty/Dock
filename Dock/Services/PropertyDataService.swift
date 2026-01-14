@@ -154,12 +154,26 @@ actor PropertyDataService {
         let altPhotos = response.altPhotos?.compactMap { $0.nilIfEmpty } ?? []
         let listingUrl = response.listingUrl?.nilIfEmpty
         
+        // Build combined photoURLs array with primary first (if available)
+        // This ensures the primary photo URL is available for AsyncImage fallback
+        var combinedPhotoURLs: [String] = []
+        if let primary = primaryPhoto {
+            combinedPhotoURLs.append(primary)
+        }
+        // Add alt photos, avoiding duplicates
+        for altPhoto in altPhotos {
+            if !combinedPhotoURLs.contains(altPhoto) {
+                combinedPhotoURLs.append(altPhoto)
+            }
+        }
+        
         // Debug logging for photo data
         print("📷 [PropertyDataService] API Response photos:")
         print("   primaryPhoto: \(primaryPhoto ?? "nil")")
         print("   altPhotos count: \(altPhotos.count)")
-        if !altPhotos.isEmpty {
-            print("   first altPhoto: \(altPhotos.first ?? "nil")")
+        print("   combinedPhotoURLs count: \(combinedPhotoURLs.count)")
+        if let firstURL = combinedPhotoURLs.first {
+            print("   first photoURL: \(firstURL)")
         }
         print("   listingUrl: \(listingUrl ?? "nil")")
         
@@ -179,7 +193,7 @@ actor PropertyDataService {
             propertyType: mapPropertyType(response.propertyType),
             taxAssessedValue: response.assessedValue ?? 0,
             annualTaxes: 0, // Not provided by HomeHarvest
-            photoURLs: altPhotos,
+            photoURLs: combinedPhotoURLs, // Now includes primary photo first for fallback
             primaryPhotoURL: primaryPhoto,
             zestimate: response.estimatedValue,
             rentZestimate: nil, // Would need separate rent listing search
