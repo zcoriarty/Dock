@@ -19,7 +19,7 @@ final class HomeViewModel {
     var folders: [PropertyFolder] = []
     var selectedFolder: PropertyFolder?
     var searchText: String = ""
-    var sortOption: SortOption = .dateAdded
+    var sortOption: SortOption = .score
     var sortAscending: Bool = false
     var isLoading: Bool = false
     var errorMessage: String?

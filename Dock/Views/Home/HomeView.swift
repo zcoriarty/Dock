@@ -15,6 +15,10 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Namespace private var namespace
     
+    // Persisted sort preferences (defaults to Score, descending)
+    @AppStorage("propertySortOption") private var storedSortOption: String = "Score"
+    @AppStorage("propertySortAscending") private var storedSortAscending: Bool = false
+    
     private var backgroundColor: Color {
         colorScheme == .dark ? Color.black : Color.white
     }
@@ -36,7 +40,7 @@ struct HomeView: View {
                     mainContent
                 }
             }
-            .navigationTitle("\(viewModel.properties.count) Home\(viewModel.properties.count == 1 ? "" : "s")")
+            .navigationTitle("\(viewModel.properties.count) \(viewModel.properties.count == 1 ? "Property" : "Properties")")
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $viewModel.searchText, prompt: "Search properties")
             .toolbar {
@@ -46,6 +50,7 @@ struct HomeView: View {
                             Button {
                                 withAnimation {
                                     viewModel.sortOption = option
+                                    storedSortOption = option.rawValue
                                 }
                                 Task { @MainActor in
                                     HapticManager.shared.selection()
@@ -66,6 +71,7 @@ struct HomeView: View {
                         Button {
                             withAnimation {
                                 viewModel.sortAscending.toggle()
+                                storedSortAscending = viewModel.sortAscending
                             }
                         } label: {
                             Label(
@@ -76,7 +82,7 @@ struct HomeView: View {
                     } label: {
                         Image(systemName: "arrow.up.arrow.down.circle")
                             .fontWeight(.medium)
-                            .symbolVariant(viewModel.sortOption != .dateAdded ? .fill : .none)
+                            .symbolVariant(viewModel.sortOption != .score ? .fill : .none)
                     }
                 }
                 
@@ -112,6 +118,13 @@ struct HomeView: View {
             }
             .refreshable {
                 await viewModel.loadData()
+            }
+            .onAppear {
+                // Load persisted sort preferences
+                if let option = HomeViewModel.SortOption(rawValue: storedSortOption) {
+                    viewModel.sortOption = option
+                }
+                viewModel.sortAscending = storedSortAscending
             }
         }
     }
@@ -202,7 +215,7 @@ struct HomeView: View {
     private var propertyCards: some View {
         LazyVStack(spacing: 16) {
             ForEach(viewModel.displayedProperties) { property in
-                ModernPropertyCard(
+                PropertyCard(
                     property: property,
                     cardBackground: cardBackground,
                     colorScheme: colorScheme,
@@ -317,176 +330,6 @@ struct ModernFolderChip: View {
             }
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Modern Property Card
-
-struct ModernPropertyCard: View {
-    let property: Property
-    let cardBackground: Color
-    let colorScheme: ColorScheme
-    let onPin: () -> Void
-    let onDelete: () -> Void
-    
-    private var score: Double {
-        property.metrics.overallScore
-    }
-    
-    private var recommendation: InvestmentRecommendation {
-        property.metrics.recommendation
-    }
-    
-    var body: some View {
-        cardLayout
-            .background(cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .contextMenu {
-                Button {
-                    onPin()
-                } label: {
-                    Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
-                }
-                
-                Divider()
-                
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-    }
-    
-    // MARK: - Card Layout
-    
-    private var cardLayout: some View {
-        HStack(spacing: 14) {
-            // Property image or placeholder on the left
-            propertyImage
-                .frame(width: 100, height: 100)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            
-            // Content
-            VStack(alignment: .leading, spacing: 6) {
-                // Top row: Price, score badge, pin
-                HStack(alignment: .center) {
-                    Text(property.askingPrice.asCompactCurrency)
-                        .font(.system(.title3, design: .rounded, weight: .bold))
-                    
-                    Spacer()
-                    
-                    scoreBadge
-                    
-                    if property.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                }
-                
-                // Address
-                Text(property.address)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                
-                Text("\(property.city), \(property.state)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                // Stats row
-                HStack(spacing: 12) {
-                    CompactStat(value: "\(property.bedrooms)", label: "bd")
-                    CompactStat(value: String(format: "%.1f", property.bathrooms), label: "ba")
-                    CompactStat(value: property.squareFeet.withCommas, label: "sqft")
-                    
-                    Spacer()
-                    
-                    cashFlowBadge
-                }
-            }
-        }
-        .padding(12)
-    }
-    
-    // MARK: - Property Image
-    
-    @ViewBuilder
-    private var propertyImage: some View {
-        if let photoData = property.primaryPhotoData,
-           let uiImage = UIImage(data: photoData) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } else if let firstURL = property.photoURLs.first,
-                  let url = URL(string: firstURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                case .failure:
-                    placeholderImage
-                case .empty:
-                    placeholderImage
-                        .overlay {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        }
-                @unknown default:
-                    placeholderImage
-                }
-            }
-        } else {
-            placeholderImage
-        }
-    }
-    
-    private var placeholderImage: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.primary.opacity(0.06),
-                        Color.primary.opacity(0.03)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay {
-                Image(systemName: property.propertyType.icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(Color.primary.opacity(0.2))
-            }
-    }
-    
-    private var scoreBadge: some View {
-        HStack(spacing: 6) {
-            Text("\(Int(score))")
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
-            
-            Circle()
-                .fill(recommendation.color)
-                .frame(width: 8, height: 8)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-    }
-    
-    private var cashFlowBadge: some View {
-        let cashFlow = property.metrics.dealEconomics.monthlyCashFlow
-        return Text(cashFlow.asCurrency)
-            .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(cashFlow >= 0 ? .green : .red)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background((cashFlow >= 0 ? Color.green : Color.red).opacity(0.1))
-            .clipShape(Capsule())
     }
 }
 

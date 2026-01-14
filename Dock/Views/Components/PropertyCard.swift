@@ -9,89 +9,93 @@ import SwiftUI
 
 struct PropertyCard: View {
     let property: Property
+    let cardBackground: Color
+    let colorScheme: ColorScheme
     let onPin: () -> Void
     let onDelete: () -> Void
     
-    @State private var showingActions: Bool = false
+    private var score: Double {
+        property.metrics.overallScore
+    }
     
-    private var metrics: DealMetrics {
-        property.metrics
+    private var recommendation: InvestmentRecommendation {
+        property.metrics.recommendation
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Image on left
+        cardLayout
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .contextMenu {
+                Button {
+                    onPin()
+                } label: {
+                    Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
+                }
+                
+                Divider()
+                
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+    }
+    
+    // MARK: - Card Layout
+    
+    private var cardLayout: some View {
+        HStack(spacing: 14) {
+            // Property image or placeholder on the left
             propertyImage
-                .frame(width: 100, height: 100)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             
-            // Content on right
+            // Content
             VStack(alignment: .leading, spacing: 6) {
-                // Address and score
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(property.address)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .lineLimit(1)
-                        
-                        Text("\(property.city), \(property.state) \(property.zipCode)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                // Top row: Price, score badge, pin
+                HStack(alignment: .center) {
+                    Text(property.askingPrice.asCompactCurrency)
+                        .font(.system(.title3, design: .rounded, weight: .bold))
                     
                     Spacer()
                     
-                    HStack(spacing: 6) {
-                        if property.isPinned {
-                            Image(systemName: "pin.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                        }
-                        
-                        ScoreMiniBadge(
-                            score: metrics.overallScore,
-                            recommendation: metrics.recommendation
-                        )
+                    scoreBadge
+                    
+                    if property.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
                 }
                 
-                // Quick stats
-                HStack(spacing: 10) {
-                    StatPill(icon: "bed.double.fill", value: "\(property.bedrooms)")
-                    StatPill(icon: "shower.fill", value: String(format: "%.1f", property.bathrooms))
-                    StatPill(icon: "square.fill", value: property.squareFeet.withCommas)
-                }
+                // Address
+                Text(property.address)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
                 
-                // Key metrics row
-                HStack(spacing: 16) {
-                    MetricPill(title: "Price", value: property.askingPrice.asCompactCurrency)
-                    MetricPill(title: "Cap", value: metrics.dealEconomics.inPlaceCapRate.asPercent())
-                    MetricPill(title: "CoC", value: metrics.dealEconomics.cashOnCashReturn.asPercent())
-                    MetricPill(title: "CF/mo", value: metrics.dealEconomics.monthlyCashFlow.asCompactCurrency)
+                Text("\(property.city), \(property.state)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                // Stats row
+                HStack(spacing: 12) {
+                    CompactStat(value: "\(property.bedrooms)", label: "bd")
+                    CompactStat(value: String(format: "%.1f", property.bathrooms), label: "ba")
+                    CompactStat(value: property.squareFeet.withCommas, label: "sqft")
+                    
+                    Spacer()
+                    
+                    cashFlowBadge
                 }
             }
         }
         .padding(10)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
-        .contextMenu {
-            Button {
-                onPin()
-            } label: {
-                Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
-            }
-            
-            Divider()
-            
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
     }
+    
+    // MARK: - Property Image
     
     @ViewBuilder
     private var propertyImage: some View {
@@ -129,154 +133,46 @@ struct PropertyCard: View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: [Color(.systemGray5), Color(.systemGray4)],
+                    colors: [
+                        Color.primary.opacity(0.06),
+                        Color.primary.opacity(0.03)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
             .overlay {
                 Image(systemName: property.propertyType.icon)
-                    .font(.title2)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.primary.opacity(0.2))
             }
     }
-}
-
-// MARK: - Supporting Views
-
-
-struct MetricPill: View {
-    let title: String
-    let value: String
-    var color: Color = .primary
     
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            
-            Text(value)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(color)
-        }
-    }
-}
-
-struct ScoreMiniBadge: View {
-    let score: Double
-    let recommendation: InvestmentRecommendation
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: recommendation.icon)
-                .font(.caption2)
-            
+    private var scoreBadge: some View {
+        HStack(spacing: 6) {
             Text("\(Int(score))")
-                .font(.system(.caption, design: .rounded, weight: .bold))
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+            
+            Circle()
+                .fill(recommendation.color)
+                .frame(width: 8, height: 8)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(recommendation.color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
         .clipShape(Capsule())
     }
-}
-
-// MARK: - Compact Card
-
-struct PropertyCompactCard: View {
-    let property: Property
     
-    private var metrics: DealMetrics {
-        property.metrics
+    private var cashFlowBadge: some View {
+        let cashFlow = property.metrics.dealEconomics.monthlyCashFlow
+        return Text(cashFlow.asCurrency)
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .foregroundStyle(cashFlow >= 0 ? .green : .red)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background((cashFlow >= 0 ? Color.green : Color.red).opacity(0.1))
+            .clipShape(Capsule())
     }
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Thumbnail
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(.systemGray5))
-                .frame(width: 60, height: 60)
-                .overlay {
-                    if let photoData = property.primaryPhotoData,
-                       let uiImage = UIImage(data: photoData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    } else {
-                        Image(systemName: property.propertyType.icon)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            
-            // Info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(property.address)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                
-                Text("\(property.city), \(property.state)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 8) {
-                    Text(property.askingPrice.asCompactCurrency)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                    
-                    Text("•")
-                        .foregroundStyle(.tertiary)
-                    
-                    Text("\(metrics.dealEconomics.cashOnCashReturn.asPercent) CoC")
-                        .font(.caption)
-                        .foregroundStyle(metrics.dealEconomics.cashOnCashReturn >= property.thresholds.targetCashOnCash ? .green : .secondary)
-                }
-            }
-            
-            Spacer()
-            
-            // Score
-            VStack(spacing: 2) {
-                Text("\(Int(metrics.overallScore))")
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(metrics.recommendation.color)
-                
-                Image(systemName: metrics.recommendation.icon)
-                    .font(.caption2)
-                    .foregroundStyle(metrics.recommendation.color)
-            }
-            
-            if property.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-        }
-        .padding(12)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-}
-
-// MARK: - Preview
-
-#Preview("Property Card") {
-    ScrollView {
-        VStack(spacing: 16) {
-            PropertyCard(
-                property: .preview,
-                onPin: {},
-                onDelete: {}
-            )
-            
-            PropertyCompactCard(property: .preview)
-        }
-        .padding()
-    }
-    .background(Color(.systemGroupedBackground))
 }
 
 // MARK: - Preview Helper
