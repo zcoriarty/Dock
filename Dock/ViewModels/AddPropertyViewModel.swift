@@ -165,10 +165,11 @@ final class AddPropertyViewModel {
                 property.photoURLs = propertyData.photoURLs
                 property.listingURL = propertyData.listingURL
                 
-                // Download primary photo if available
-                if let primaryPhotoURL = propertyData.primaryPhotoURL,
-                   let imageURL = URL(string: primaryPhotoURL) {
-                    print("📸 Downloading primary photo from: \(primaryPhotoURL)")
+                // Download primary photo - try primary first, then fallback to first alt photo
+                let photoURLToTry = propertyData.primaryPhotoURL ?? propertyData.photoURLs.first
+                if let photoURLString = photoURLToTry,
+                   let imageURL = URL(string: photoURLString) {
+                    print("📸 Downloading photo from: \(photoURLString)")
                     do {
                         let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
                         property.primaryPhotoData = imageData
@@ -176,6 +177,10 @@ final class AddPropertyViewModel {
                     } catch {
                         print("⚠️ Failed to download photo: \(error.localizedDescription)")
                     }
+                } else {
+                    print("⚠️ No photo URL available from API response")
+                    print("   primaryPhotoURL: \(propertyData.primaryPhotoURL ?? "nil")")
+                    print("   photoURLs count: \(propertyData.photoURLs.count)")
                 }
                 
                 // Set financing

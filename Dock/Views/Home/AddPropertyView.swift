@@ -9,17 +9,31 @@ import SwiftUI
 
 struct AddPropertyView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel = AddPropertyViewModel()
     
     let onAdd: (Property) -> Void
     
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemGroupedBackground)
+                backgroundColor
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
+                    // Progress indicator
+                    progressIndicator
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
+                    
                     // Content
                     TabView(selection: Binding(
                         get: { viewModel.step.rawValue },
@@ -42,7 +56,7 @@ struct AddPropertyView: View {
                     
                     // Bottom buttons
                     bottomButtons
-                        .padding()
+                        .padding(20)
                 }
             }
             .navigationTitle("Add Property")
@@ -52,6 +66,7 @@ struct AddPropertyView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundStyle(.secondary)
                 }
             }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
@@ -64,22 +79,35 @@ struct AddPropertyView: View {
         }
     }
     
+    // MARK: - Progress Indicator
+    
+    private var progressIndicator: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<4) { index in
+                Capsule()
+                    .fill(index <= viewModel.step.rawValue ? Color.primary : Color.primary.opacity(0.15))
+                    .frame(height: 4)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+    
     // MARK: - Address Step
     
     private var addressStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {                    
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Enter Property Address")
                         .font(.title2)
                         .fontWeight(.bold)
                     
-                    Text("Start typing an address and select from the suggestions to automatically fetch property details.")
+                    Text("Start typing an address and select from suggestions to auto-fill property details.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.top, 16)
+                .padding(.top, 8)
                 
                 AddressSearchField(
                     title: "Property Address",
@@ -99,7 +127,6 @@ struct AddPropertyView: View {
                     .padding(.vertical, 8)
                 }
                 
-                Spacer(minLength: 100)
                 
                 Button {
                     viewModel.skipAddress()
@@ -117,9 +144,9 @@ struct AddPropertyView: View {
     
     private var detailsStep: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 // Address Section
-                FormSection(title: "Address", icon: "mappin.circle.fill") {
+                ModernFormSection(title: "Address", icon: "mappin.circle.fill", cardBackground: cardBackground) {
                     TextInputField(title: "Street Address", text: $viewModel.property.address, icon: "house")
                     
                     HStack(spacing: 12) {
@@ -134,13 +161,13 @@ struct AddPropertyView: View {
                 }
                 
                 // Property Details
-                FormSection(title: "Property Details", icon: "building.2.fill") {
+                ModernFormSection(title: "Property Details", icon: "building.2.fill", cardBackground: cardBackground) {
                     CurrencyField(title: "Asking Price", value: $viewModel.property.askingPrice)
                     
                     HStack(spacing: 12) {
-                        CompactStepperField(title: "Beds", value: $viewModel.property.bedrooms)
+                        ModernStepperField(title: "Beds", value: $viewModel.property.bedrooms, cardBackground: cardBackground)
                         
-                        CompactBathroomField(title: "Baths", value: $viewModel.property.bathrooms)
+                        ModernBathroomField(title: "Baths", value: $viewModel.property.bathrooms, cardBackground: cardBackground)
                     }
                     
                     HStack(spacing: 12) {
@@ -150,11 +177,11 @@ struct AddPropertyView: View {
                     
                     HStack(spacing: 12) {
                         NumberField(title: "Year Built", value: $viewModel.property.yearBuilt)
-                        CompactStepperField(title: "Units", value: $viewModel.property.unitCount, range: 1...100)
+                        ModernStepperField(title: "Units", value: $viewModel.property.unitCount, range: 1...100, cardBackground: cardBackground)
                     }
                     
                     // Property Type
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("Property Type")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -162,9 +189,10 @@ struct AddPropertyView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(PropertyType.allCases, id: \.self) { type in
-                                    PropertyTypeChip(
+                                    ModernPropertyTypeChip(
                                         type: type,
-                                        isSelected: viewModel.property.propertyType == type
+                                        isSelected: viewModel.property.propertyType == type,
+                                        colorScheme: colorScheme
                                     ) {
                                         viewModel.property.propertyType = type
                                     }
@@ -175,7 +203,7 @@ struct AddPropertyView: View {
                 }
                 
                 // Taxes & Insurance
-                FormSection(title: "Taxes & Insurance", icon: "doc.text.fill") {
+                ModernFormSection(title: "Taxes & Insurance", icon: "doc.text.fill", cardBackground: cardBackground) {
                     HStack(spacing: 12) {
                         CurrencyField(title: "Tax Assessed Value", value: $viewModel.property.taxAssessedValue)
                         CurrencyField(title: "Annual Taxes", value: $viewModel.property.annualTaxes)
@@ -193,15 +221,15 @@ struct AddPropertyView: View {
     
     private var financingStep: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 // Purchase Price
-                FormSection(title: "Purchase", icon: "dollarsign.circle.fill") {
+                ModernFormSection(title: "Purchase", icon: "dollarsign.circle.fill", cardBackground: cardBackground) {
                     CurrencyField(title: "Purchase Price", value: $viewModel.property.financing.purchasePrice)
                     CurrencyField(title: "Closing Costs", value: $viewModel.property.financing.closingCosts)
                 }
                 
                 // Loan Details
-                FormSection(title: "Financing", icon: "banknote.fill") {
+                ModernFormSection(title: "Financing", icon: "banknote.fill", cardBackground: cardBackground) {
                     SliderField(
                         title: "Loan-to-Value (LTV)",
                         value: $viewModel.property.financing.ltv,
@@ -233,14 +261,14 @@ struct AddPropertyView: View {
                 }
                 
                 // Income
-                FormSection(title: "Income", icon: "chart.line.uptrend.xyaxis") {
+                ModernFormSection(title: "Income", icon: "chart.line.uptrend.xyaxis", cardBackground: cardBackground) {
                     CurrencyField(title: "Estimated Rent (per unit/mo)", value: $viewModel.property.estimatedRentPerUnit)
                         .onChange(of: viewModel.property.estimatedRentPerUnit) { _, newValue in
                             viewModel.property.estimatedTotalRent = newValue * Double(viewModel.property.unitCount)
                         }
                     
                     if viewModel.property.unitCount > 1 {
-                        InlineDisplayRow(title: "Total Monthly Rent", value: viewModel.property.estimatedTotalRent.asCurrency)
+                        ModernDisplayRow(title: "Total Monthly Rent", value: viewModel.property.estimatedTotalRent.asCurrency, cardBackground: cardBackground)
                     }
                     
                     SliderField(
@@ -253,7 +281,7 @@ struct AddPropertyView: View {
                 }
                 
                 // Expenses
-                FormSection(title: "Operating Expenses", icon: "arrow.down.circle.fill") {
+                ModernFormSection(title: "Operating Expenses", icon: "arrow.down.circle.fill", cardBackground: cardBackground) {
                     SliderField(
                         title: "Management Fee",
                         value: $viewModel.property.managementFeePercent,
@@ -279,164 +307,169 @@ struct AddPropertyView: View {
                 let metrics = viewModel.property.metrics
                 
                 // Property Header Card
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.1))
-                            Image(systemName: "house.fill")
-                                .font(.title3)
-                                .foregroundStyle(.tint)
-                        }
-                        .frame(width: 40, height: 40)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(viewModel.property.askingPrice.asCompactCurrency)
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                            
                             Text(viewModel.property.address)
                                 .font(.subheadline)
-                                .fontWeight(.semibold)
+                            
                             Text("\(viewModel.property.city), \(viewModel.property.state) \(viewModel.property.zipCode)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        // Score
+                        ZStack {
+                            Circle()
+                                .stroke(Color.primary.opacity(0.1), lineWidth: 4)
+                                .frame(width: 56, height: 56)
+                            
+                            Circle()
+                                .trim(from: 0, to: metrics.overallScore / 100)
+                                .stroke(metrics.recommendation.color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                                .frame(width: 56, height: 56)
+                                .rotationEffect(.degrees(-90))
+                            
+                            Text("\(Int(metrics.overallScore))")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
                         }
                     }
                     
                     Divider()
                     
-                    HStack(spacing: 16) {
-                        PropertyStat(icon: "bed.double.fill", value: "\(viewModel.property.bedrooms)", label: "beds")
-                        PropertyStat(icon: "shower.fill", value: String(format: "%.1f", viewModel.property.bathrooms), label: "baths")
-                        PropertyStat(icon: "square.fill", value: viewModel.property.squareFeet.withCommas, label: "sq ft")
+                    HStack(spacing: 20) {
+                        ReviewStat(value: "\(viewModel.property.bedrooms)", label: "Beds")
+                        ReviewStat(value: String(format: "%.1f", viewModel.property.bathrooms), label: "Baths")
+                        ReviewStat(value: viewModel.property.squareFeet.withCommas, label: "Sq Ft")
                         if viewModel.property.unitCount > 1 {
-                            PropertyStat(icon: "building.2.fill", value: "\(viewModel.property.unitCount)", label: "units")
+                            ReviewStat(value: "\(viewModel.property.unitCount)", label: "Units")
                         }
                     }
                 }
-                .padding(16)
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(20)
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 
-                // Investment Score Card
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Investment Score")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
+                // Recommendation Card
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(metrics.recommendation.color)
+                        .frame(width: 48, height: 48)
+                        .overlay {
+                            Image(systemName: metrics.recommendation.icon)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                        }
                     
-                    HStack(spacing: 14) {
-                        // Score Ring
-                        ZStack {
-                            Circle()
-                                .stroke(metrics.recommendation.color.opacity(0.15), lineWidth: 6)
-                            
-                            Circle()
-                                .trim(from: 0, to: metrics.overallScore / 100)
-                                .stroke(
-                                    metrics.recommendation.color,
-                                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                                )
-                                .rotationEffect(.degrees(-90))
-                            
-                            Text("\(Int(metrics.overallScore))")
-                                .font(.system(.title3, design: .rounded, weight: .bold))
-                        }
-                        .frame(width: 56, height: 56)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(metrics.recommendation.rawValue)
+                            .font(.headline)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Image(systemName: metrics.recommendation.icon)
-                                Text(metrics.recommendation.rawValue)
-                            }
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(metrics.recommendation.color)
-                            
-                            Text(metrics.recommendation.description)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
+                        Text(metrics.recommendation.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
+                    
+                    Spacer()
                 }
                 .padding(16)
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 
                 // Key Metrics
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Key Metrics")
-                        .font(.caption)
+                        .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                        ReviewMetricCard(
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ModernReviewMetricCard(
                             title: "Cap Rate",
                             value: metrics.dealEconomics.inPlaceCapRate.asPercent(),
                             score: UnderwritingEngine.scoreCapRate(
                                 metrics.dealEconomics.inPlaceCapRate,
                                 target: viewModel.property.thresholds.targetCapRate
-                            )
+                            ),
+                            cardBackground: cardBackground
                         )
                         
-                        ReviewMetricCard(
+                        ModernReviewMetricCard(
                             title: "Cash-on-Cash",
                             value: metrics.dealEconomics.cashOnCashReturn.asPercent(),
                             score: UnderwritingEngine.scoreCashOnCash(
                                 metrics.dealEconomics.cashOnCashReturn,
                                 target: viewModel.property.thresholds.targetCashOnCash
-                            )
+                            ),
+                            cardBackground: cardBackground
                         )
                         
-                        ReviewMetricCard(
+                        ModernReviewMetricCard(
                             title: "DSCR",
                             value: String(format: "%.2fx", metrics.dealEconomics.dscr),
                             score: UnderwritingEngine.scoreDSCR(
                                 metrics.dealEconomics.dscr,
                                 target: viewModel.property.thresholds.targetDSCR
-                            )
+                            ),
+                            cardBackground: cardBackground
                         )
                         
-                        ReviewMetricCard(
+                        ModernReviewMetricCard(
                             title: "Monthly Cash Flow",
                             value: metrics.dealEconomics.monthlyCashFlow.asCurrency,
-                            score: metrics.dealEconomics.monthlyCashFlow > 0 ? .meets : .fails
+                            score: metrics.dealEconomics.monthlyCashFlow > 0 ? .meets : .fails,
+                            cardBackground: cardBackground
                         )
                     }
                 }
                 
                 // Financial Summary
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Financial Summary")
-                        .font(.caption)
+                        .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
                     VStack(spacing: 0) {
-                        FinancialRow(title: "Purchase Price", value: viewModel.property.financing.purchasePrice.asCurrency)
-                        FinancialRow(title: "Down Payment", value: viewModel.property.financing.downPayment.asCurrency)
-                        FinancialRow(title: "Loan Amount", value: viewModel.property.financing.loanAmount.asCurrency)
-                        FinancialRow(title: "Total Cash Required", value: viewModel.property.financing.totalCashRequired.asCurrency, isHighlighted: true)
+                        ModernFinancialRow(title: "Purchase Price", value: viewModel.property.financing.purchasePrice.asCurrency)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Down Payment", value: viewModel.property.financing.downPayment.asCurrency)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Loan Amount", value: viewModel.property.financing.loanAmount.asCurrency)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Total Cash Required", value: viewModel.property.financing.totalCashRequired.asCurrency, isHighlighted: true)
                     }
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 
                 // Income & Expenses
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Income & Expenses")
-                        .font(.caption)
+                        .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                     
                     VStack(spacing: 0) {
-                        FinancialRow(title: "Gross Potential Rent", value: metrics.dealEconomics.grossPotentialRent.asCurrency, valueColor: .green)
-                        FinancialRow(title: "Operating Expenses", value: "(\(metrics.dealEconomics.totalOperatingExpenses.asCurrency))", valueColor: .red)
-                        FinancialRow(title: "Net Operating Income", value: metrics.dealEconomics.netOperatingIncome.asCurrency, isHighlighted: true)
-                        FinancialRow(title: "Annual Debt Service", value: "(\(metrics.dealEconomics.annualDebtService.asCurrency))", valueColor: .red)
-                        FinancialRow(title: "Annual Cash Flow", value: metrics.dealEconomics.annualCashFlow.asCurrency, isHighlighted: true, valueColor: metrics.dealEconomics.annualCashFlow >= 0 ? .green : .red)
+                        ModernFinancialRow(title: "Gross Potential Rent", value: metrics.dealEconomics.grossPotentialRent.asCurrency, valueColor: .green)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Operating Expenses", value: "-\(metrics.dealEconomics.totalOperatingExpenses.asCurrency)", valueColor: .red)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Net Operating Income", value: metrics.dealEconomics.netOperatingIncome.asCurrency, isHighlighted: true)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Annual Debt Service", value: "-\(metrics.dealEconomics.annualDebtService.asCurrency)", valueColor: .red)
+                        Divider().padding(.leading, 16)
+                        ModernFinancialRow(title: "Annual Cash Flow", value: metrics.dealEconomics.annualCashFlow.asCurrency, isHighlighted: true, valueColor: metrics.dealEconomics.annualCashFlow >= 0 ? .green : .red)
                     }
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             }
             .padding(.horizontal, 20)
@@ -452,11 +485,19 @@ struct AddPropertyView: View {
                 Button {
                     viewModel.previousStep()
                 } label: {
-                    Label("Back", systemImage: "chevron.left")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.subheadline)
+                        Text("Back")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(cardBackground)
+                    .foregroundStyle(.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .buttonStyle(.bordered)
             }
             
             Button {
@@ -471,25 +512,304 @@ struct AddPropertyView: View {
                     viewModel.nextStep()
                 }
             } label: {
-                Group {
-                    if viewModel.step == .address && !viewModel.hasAttemptedFetch {
-                        Label("Fetch Property", systemImage: "arrow.down.circle")
-                    } else if viewModel.step == .review {
-                        Label("Add Property", systemImage: "checkmark.circle")
-                    } else {
-                        Label("Next", systemImage: "chevron.right")
+                HStack(spacing: 6) {
+                    Group {
+                        if viewModel.step == .address && !viewModel.hasAttemptedFetch {
+                            Text("Fetch Property")
+                            Image(systemName: "arrow.down.circle")
+                        } else if viewModel.step == .review {
+                            Text("Add Property")
+                            Image(systemName: "checkmark.circle")
+                        } else {
+                            Text("Next")
+                            Image(systemName: "chevron.right")
+                        }
                     }
+                    .font(.subheadline)
                 }
+                .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
+                .background(Color.primary)
+                .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .buttonStyle(.borderedProminent)
             .disabled(!viewModel.canProceed && viewModel.step != .address)
         }
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Modern Form Components
+
+struct ModernFormSection<Content: View>: View {
+    let title: String
+    let icon: String
+    let cardBackground: Color
+    let content: Content
+    
+    init(title: String, icon: String, cardBackground: Color, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.cardBackground = cardBackground
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+            }
+            
+            VStack(spacing: 14) {
+                content
+            }
+        }
+        .padding(16)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+struct ModernStepperField: View {
+    let title: String
+    @Binding var value: Int
+    var range: ClosedRange<Int> = 0...99
+    let cardBackground: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            HStack {
+                Button {
+                    if value > range.lowerBound {
+                        value -= 1
+                        Task { @MainActor in
+                            HapticManager.shared.impact(.light)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(value > range.lowerBound ? .primary : .tertiary)
+                }
+                
+                Spacer()
+                
+                Text("\(value)")
+                    .font(.system(.title2, design: .rounded, weight: .semibold))
+                
+                Spacer()
+                
+                Button {
+                    if value < range.upperBound {
+                        value += 1
+                        Task { @MainActor in
+                            HapticManager.shared.impact(.light)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(value < range.upperBound ? .primary : .tertiary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.primary.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+}
+
+struct ModernBathroomField: View {
+    let title: String
+    @Binding var value: Double
+    let cardBackground: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            HStack {
+                Button {
+                    if value > 0 {
+                        value -= 0.5
+                        Task { @MainActor in
+                            HapticManager.shared.impact(.light)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(value > 0 ? .primary : .tertiary)
+                }
+                
+                Spacer()
+                
+                Text(String(format: "%.1f", value))
+                    .font(.system(.title2, design: .rounded, weight: .semibold))
+                
+                Spacer()
+                
+                Button {
+                    value += 0.5
+                    Task { @MainActor in
+                        HapticManager.shared.impact(.light)
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.primary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.primary.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+}
+
+struct ModernDisplayRow: View {
+    let title: String
+    let value: String
+    let cardBackground: Color
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.primary.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+struct ModernPropertyTypeChip: View {
+    let type: PropertyType
+    let isSelected: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: type.icon)
+                    .font(.caption)
+                
+                Text(type.rawValue)
+                    .font(.caption)
+                    .fontWeight(isSelected ? .semibold : .regular)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color.primary : Color.clear)
+            .foregroundStyle(isSelected ? (colorScheme == .dark ? Color.black : Color.white) : .primary)
+            .clipShape(Capsule())
+            .overlay {
+                if !isSelected {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.15), lineWidth: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct ReviewStat: View {
+    let value: String
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct ModernReviewMetricCard: View {
+    let title: String
+    let value: String
+    let score: MetricScore
+    let cardBackground: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                Circle()
+                    .fill(score.color.opacity(0.15))
+                    .frame(width: 20, height: 20)
+                    .overlay {
+                        Image(systemName: score.icon)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(score.color)
+                    }
+            }
+            
+            Text(value)
+                .font(.system(.title3, design: .rounded, weight: .semibold))
+                .foregroundStyle(score.color)
+        }
+        .padding(14)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+struct ModernFinancialRow: View {
+    let title: String
+    let value: String
+    var isHighlighted: Bool = false
+    var valueColor: Color? = nil
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(isHighlighted ? .medium : .regular)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: isHighlighted ? .semibold : .medium))
+                .foregroundStyle(valueColor ?? .primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isHighlighted ? Color.primary.opacity(0.03) : Color.clear)
+    }
+}
+
+// MARK: - Legacy Support
 
 struct FormSection<Content: View>: View {
     let title: String

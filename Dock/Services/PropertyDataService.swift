@@ -42,9 +42,9 @@ actor PropertyDataService {
             throw NetworkError.invalidURL
         }
         
+        // Don't cache property requests - we want fresh data with photos
         let response: DockPropertyResponse = try await NetworkManager.shared.request(
-            url: requestURL,
-            cacheKey: "dock_property_\(url.hashValue)"
+            url: requestURL
         )
         
         return mapDockResponse(response)
@@ -69,12 +69,20 @@ actor PropertyDataService {
         
         print("🌐 [PropertyDataService] Requesting: \(url.absoluteString)")
         
+        // Don't cache property requests - we want fresh data with photos
         let response: DockPropertyResponse = try await NetworkManager.shared.request(
-            url: url,
-            cacheKey: "dock_property_\(address.hashValue)"
+            url: url
         )
         
-        print("✅ [PropertyDataService] Got response: \(response.address ?? "no address"), price: \(response.price ?? 0)")
+        // Log full response details for debugging
+        print("✅ [PropertyDataService] Got response:")
+        print("   address: \(response.address ?? "nil")")
+        print("   city: \(response.city ?? "nil"), state: \(response.state ?? "nil"), zip: \(response.zipCode ?? "nil")")
+        print("   price: \(response.price ?? 0)")
+        print("   beds: \(response.bedrooms ?? 0), baths: \(response.bathrooms ?? 0), sqft: \(response.sqft ?? 0)")
+        print("   yearBuilt: \(response.yearBuilt ?? 0)")
+        print("   primaryPhoto: \(response.primaryPhoto ?? "nil")")
+        print("   listingUrl: \(response.listingUrl ?? "nil")")
         
         return mapDockResponse(response)
     }
@@ -141,7 +149,21 @@ actor PropertyDataService {
     // MARK: - Mapping
     
     private func mapDockResponse(_ response: DockPropertyResponse) -> PropertyData {
-        PropertyData(
+        // Clean up photo URLs - filter out empty strings
+        let primaryPhoto = response.primaryPhoto?.nilIfEmpty
+        let altPhotos = response.altPhotos?.compactMap { $0.nilIfEmpty } ?? []
+        let listingUrl = response.listingUrl?.nilIfEmpty
+        
+        // Debug logging for photo data
+        print("📷 [PropertyDataService] API Response photos:")
+        print("   primaryPhoto: \(primaryPhoto ?? "nil")")
+        print("   altPhotos count: \(altPhotos.count)")
+        if !altPhotos.isEmpty {
+            print("   first altPhoto: \(altPhotos.first ?? "nil")")
+        }
+        print("   listingUrl: \(listingUrl ?? "nil")")
+        
+        return PropertyData(
             address: response.address ?? "",
             city: response.city ?? "",
             state: response.state ?? "",
@@ -157,13 +179,13 @@ actor PropertyDataService {
             propertyType: mapPropertyType(response.propertyType),
             taxAssessedValue: response.assessedValue ?? 0,
             annualTaxes: 0, // Not provided by HomeHarvest
-            photoURLs: response.altPhotos ?? [],
-            primaryPhotoURL: response.primaryPhoto,
+            photoURLs: altPhotos,
+            primaryPhotoURL: primaryPhoto,
             zestimate: response.estimatedValue,
             rentZestimate: nil, // Would need separate rent listing search
             description: response.description,
             daysOnMarket: response.daysOnMls,
-            listingURL: response.listingUrl,
+            listingURL: listingUrl,
             mlsId: response.mlsId,
             hoaFee: response.hoaFee,
             pricePerSqft: response.pricePerSqft,
@@ -363,6 +385,8 @@ struct PropertyData: Sendable {
 
 // MARK: - Dock API Response Models
 
+/// Response model from Dock API
+/// Note: NetworkManager uses .convertFromSnakeCase, so no CodingKeys needed
 struct DockPropertyResponse: Codable, Sendable {
     let address: String?
     let city: String?
@@ -394,39 +418,6 @@ struct DockPropertyResponse: Codable, Sendable {
     let description: String?
     let agentName: String?
     let brokerName: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case address
-        case city
-        case state
-        case zipCode = "zip_code"
-        case latitude
-        case longitude
-        case price
-        case bedrooms
-        case bathrooms
-        case sqft
-        case lotSqft = "lot_sqft"
-        case yearBuilt = "year_built"
-        case propertyType = "property_type"
-        case pricePerSqft = "price_per_sqft"
-        case hoaFee = "hoa_fee"
-        case daysOnMls = "days_on_mls"
-        case listDate = "list_date"
-        case soldPrice = "sold_price"
-        case lastSoldDate = "last_sold_date"
-        case assessedValue = "assessed_value"
-        case estimatedValue = "estimated_value"
-        case mlsId = "mls_id"
-        case listingUrl = "listing_url"
-        case primaryPhoto = "primary_photo"
-        case altPhotos = "alt_photos"
-        case source
-        case status
-        case description
-        case agentName = "agent_name"
-        case brokerName = "broker_name"
-    }
 }
 
 struct DockSearchResponse: Codable, Sendable {

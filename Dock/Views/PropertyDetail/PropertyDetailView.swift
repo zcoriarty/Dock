@@ -101,7 +101,7 @@ struct PropertyDetailView: View {
     
     private var propertyHeader: some View {
         VStack(spacing: 0) {
-            // Photo - only show if we have one
+            // Photo section
             if let photoData = viewModel.property.primaryPhotoData,
                let uiImage = UIImage(data: photoData) {
                 Image(uiImage: uiImage)
@@ -109,6 +109,28 @@ struct PropertyDetailView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(height: 220)
                     .clipped()
+            } else if let firstURL = viewModel.property.photoURLs.first,
+                      let url = URL(string: firstURL) {
+                // Fallback to AsyncImage if we have a URL
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 220)
+                            .clipped()
+                    case .failure:
+                        EmptyView()
+                    case .empty:
+                        ProgressView()
+                            .frame(height: 220)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.primary.opacity(0.05))
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
             }
             
             // Property info

@@ -226,3 +226,10 @@ extension Optional where Wrapped == String {
         self?.isEmpty ?? true
     }
 }
+
+extension String {
+    /// Returns nil if the string is empty, otherwise returns self
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}

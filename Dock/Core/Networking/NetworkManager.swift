@@ -62,9 +62,16 @@ actor NetworkManager {
                 cache[cacheKey] = (data, Date())
             }
             
+            // Debug: Log raw JSON response (first 1000 chars)
+            if let jsonString = String(data: data, encoding: .utf8) {
+                let preview = String(jsonString.prefix(1000))
+                print("🔍 [NetworkManager] Raw JSON response: \(preview)")
+            }
+            
             do {
                 return try decoder.decode(T.self, from: data)
             } catch {
+                print("🔴 [NetworkManager] Decoding error: \(error)")
                 throw NetworkError.decodingError(error)
             }
             

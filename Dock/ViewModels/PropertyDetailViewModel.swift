@@ -84,31 +84,58 @@ final class PropertyDetailViewModel {
         isFetchingData = true
         defer { isFetchingData = false }
         
-        // Fetch in parallel
+        // First, refresh property data from API (including photos)
+        await refreshPropertyData()
+        
+        // Then fetch additional data in parallel
         async let ratesTask: () = fetchRates()
         async let rentTask: () = fetchRentEstimate()
         async let marketTask: () = fetchMarketData()
         async let insuranceTask: () = fetchInsuranceEstimate()
-        async let photoTask: () = fetchPrimaryPhotoIfNeeded()
         
-        _ = await (ratesTask, rentTask, marketTask, insuranceTask, photoTask)
+        _ = await (ratesTask, rentTask, marketTask, insuranceTask)
         
         HapticManager.shared.success()
     }
     
-    private func fetchPrimaryPhotoIfNeeded() async {
-        // Skip if we already have a photo
-        guard property.primaryPhotoData == nil else { return }
+    private func refreshPropertyData() async {
+        let fullAddress = property.fullAddress
+        guard !fullAddress.isEmpty else { return }
         
-        // Try to get photo from photoURLs if available
-        if let firstPhotoURL = property.photoURLs.first,
-           let imageURL = URL(string: firstPhotoURL) {
-            do {
+        // Check if we have a valid photo already
+        let hasValidPhoto = property.primaryPhotoData != nil && 
+                           UIImage(data: property.primaryPhotoData!) != nil
+        
+        // Skip if we already have a valid photo
+        if hasValidPhoto {
+            print("📸 Property already has a valid photo, skipping refresh")
+            return
+        }
+        
+        print("🔄 Refreshing property data for: \(fullAddress)")
+        
+        do {
+            let propertyData = try await propertyService.fetchPropertyByAddress(fullAddress)
+            
+            // Update photo URLs and listing URL from fresh data
+            property.photoURLs = propertyData.photoURLs
+            if property.listingURL == nil {
+                property.listingURL = propertyData.listingURL
+            }
+            
+            // Download the photo
+            let photoURLToTry = propertyData.primaryPhotoURL ?? propertyData.photoURLs.first
+            if let photoURLString = photoURLToTry,
+               let imageURL = URL(string: photoURLString) {
+                print("📸 Downloading photo from: \(photoURLString)")
                 let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
                 property.primaryPhotoData = imageData
-            } catch {
-                // Ignore photo download errors
+                print("📸 Photo downloaded successfully (\(imageData.count) bytes)")
+            } else {
+                print("⚠️ No photo URL available from API")
             }
+        } catch {
+            print("⚠️ Could not refresh property data: \(error.localizedDescription)")
         }
     }
     
@@ -143,9 +170,10 @@ final class PropertyDetailViewModel {
             property.annualTaxes = propertyData.annualTaxes
             property.photoURLs = propertyData.photoURLs
             
-            // Download primary photo if available
-            if let primaryPhotoURL = propertyData.primaryPhotoURL,
-               let imageURL = URL(string: primaryPhotoURL) {
+            // Download primary photo - try primary first, then fallback to first alt photo
+            let photoURLToTry = propertyData.primaryPhotoURL ?? propertyData.photoURLs.first
+            if let photoURLString = photoURLToTry,
+               let imageURL = URL(string: photoURLString) {
                 do {
                     let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
                     property.primaryPhotoData = imageData

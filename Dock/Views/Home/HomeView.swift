@@ -335,8 +335,13 @@ struct ModernPropertyCard: View {
     }
     
     private var hasImage: Bool {
+        // Has downloaded image data
         if let photoData = property.primaryPhotoData,
            UIImage(data: photoData) != nil {
+            return true
+        }
+        // Has a photo URL we can load
+        if !property.photoURLs.isEmpty {
             return true
         }
         return false
@@ -382,6 +387,28 @@ struct ModernPropertyCard: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(height: 140)
                         .clipped()
+                } else if let firstURL = property.photoURLs.first,
+                          let url = URL(string: firstURL) {
+                    // Fallback to AsyncImage if we have a URL
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(height: 140)
+                                .clipped()
+                        case .failure:
+                            imagePlaceholder
+                        case .empty:
+                            ProgressView()
+                                .frame(height: 140)
+                        @unknown default:
+                            imagePlaceholder
+                        }
+                    }
+                } else {
+                    imagePlaceholder
                 }
                 
                 // Score badge overlay
@@ -500,6 +527,26 @@ struct ModernPropertyCard: View {
     }
     
     // MARK: - Shared Components
+    
+    private var imagePlaceholder: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.primary.opacity(0.08),
+                        Color.primary.opacity(0.04)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(height: 140)
+            .overlay {
+                Image(systemName: property.propertyType.icon)
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.primary.opacity(0.15))
+            }
+    }
     
     private var scoreBadge: some View {
         HStack(spacing: 6) {
