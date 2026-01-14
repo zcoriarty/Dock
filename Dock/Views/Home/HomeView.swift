@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var selectedProperty: Property?
     @State private var showingFilters = false
     @Environment(\.colorScheme) private var colorScheme
+    @Namespace private var namespace
     
     private var backgroundColor: Color {
         colorScheme == .dark ? Color.black : Color.white
@@ -107,6 +108,7 @@ struct HomeView: View {
                         }
                     }
                 )
+                .navigationTransition(.zoom(sourceID: property.id, in: namespace))
             }
             .refreshable {
                 await viewModel.loadData()
@@ -215,6 +217,7 @@ struct HomeView: View {
                         }
                     }
                 )
+                .matchedTransitionSource(id: property.id, in: namespace)
                 .onTapGesture {
                     selectedProperty = property
                     Task { @MainActor in
@@ -334,154 +337,35 @@ struct ModernPropertyCard: View {
         property.metrics.recommendation
     }
     
-    private var hasImage: Bool {
-        // Has downloaded image data
-        if let photoData = property.primaryPhotoData,
-           UIImage(data: photoData) != nil {
-            return true
-        }
-        // Has a photo URL we can load
-        if !property.photoURLs.isEmpty {
-            return true
-        }
-        return false
-    }
-    
     var body: some View {
-        Group {
-            if hasImage {
-                largeCardLayout
-            } else {
-                compactCardLayout
-            }
-        }
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .contextMenu {
-            Button {
-                onPin()
-            } label: {
-                Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
-            }
-            
-            Divider()
-            
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-    }
-    
-    // MARK: - Large Card Layout (with image)
-    
-    private var largeCardLayout: some View {
-        VStack(spacing: 0) {
-            // Image section
-            ZStack(alignment: .topTrailing) {
-                if let photoData = property.primaryPhotoData,
-                   let uiImage = UIImage(data: photoData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 140)
-                        .clipped()
-                } else if let firstURL = property.photoURLs.first,
-                          let url = URL(string: firstURL) {
-                    // Fallback to AsyncImage if we have a URL
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 140)
-                                .clipped()
-                        case .failure:
-                            imagePlaceholder
-                        case .empty:
-                            ProgressView()
-                                .frame(height: 140)
-                        @unknown default:
-                            imagePlaceholder
-                        }
-                    }
-                } else {
-                    imagePlaceholder
+        cardLayout
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contextMenu {
+                Button {
+                    onPin()
+                } label: {
+                    Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
                 }
                 
-                // Score badge overlay
-                scoreBadge
-                    .padding(12)
-            }
-            
-            // Content
-            VStack(alignment: .leading, spacing: 12) {
-                // Price and pin
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(property.askingPrice.asCompactCurrency)
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                        
-                        Text(property.address)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        
-                        Text("\(property.city), \(property.state)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    // Pin indicator
-                    if property.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                }
+                Divider()
                 
-                // Stats row
-                HStack(spacing: 16) {
-                    CardStat(value: "\(property.bedrooms)", label: "Beds")
-                    CardStat(value: String(format: "%.1f", property.bathrooms), label: "Baths")
-                    CardStat(value: property.squareFeet.withCommas, label: "Sq Ft")
-                    
-                    Spacer()
-                    
-                    cashFlowBadge
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
-            .padding(16)
-        }
     }
     
-    // MARK: - Compact Card Layout (no image)
+    // MARK: - Card Layout
     
-    private var compactCardLayout: some View {
+    private var cardLayout: some View {
         HStack(spacing: 14) {
-            // Square placeholder on the left
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.primary.opacity(0.06),
-                                Color.primary.opacity(0.03)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                
-                Image(systemName: property.propertyType.icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(Color.primary.opacity(0.2))
-            }
-            .frame(maxWidth: 100)
+            // Property image or placeholder on the left
+            propertyImage
+                .frame(width: 100, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             
             // Content
             VStack(alignment: .leading, spacing: 6) {
@@ -526,25 +410,56 @@ struct ModernPropertyCard: View {
         .padding(12)
     }
     
-    // MARK: - Shared Components
+    // MARK: - Property Image
     
-    private var imagePlaceholder: some View {
+    @ViewBuilder
+    private var propertyImage: some View {
+        if let photoData = property.primaryPhotoData,
+           let uiImage = UIImage(data: photoData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else if let firstURL = property.photoURLs.first,
+                  let url = URL(string: firstURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                case .failure:
+                    placeholderImage
+                case .empty:
+                    placeholderImage
+                        .overlay {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                @unknown default:
+                    placeholderImage
+                }
+            }
+        } else {
+            placeholderImage
+        }
+    }
+    
+    private var placeholderImage: some View {
         Rectangle()
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.primary.opacity(0.08),
-                        Color.primary.opacity(0.04)
+                        Color.primary.opacity(0.06),
+                        Color.primary.opacity(0.03)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(height: 140)
             .overlay {
                 Image(systemName: property.propertyType.icon)
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.primary.opacity(0.15))
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.primary.opacity(0.2))
             }
     }
     
@@ -585,23 +500,6 @@ struct CompactStat: View {
         HStack(spacing: 2) {
             Text(value)
                 .font(.system(.caption, design: .rounded, weight: .semibold))
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-// MARK: - Card Stat
-
-struct CardStat: View {
-    let value: String
-    let label: String
-    
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
