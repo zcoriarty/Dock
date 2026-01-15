@@ -72,6 +72,13 @@ struct CurrencyField: View {
         .onAppear {
             textValue = value > 0 ? String(Int(value)) : ""
         }
+        .onChange(of: value) { _, newValue in
+            guard !isFocused else { return }
+            let formatted = newValue > 0 ? String(Int(newValue.rounded())) : ""
+            if textValue != formatted {
+                textValue = formatted
+            }
+        }
     }
 }
 
@@ -119,6 +126,13 @@ struct PercentField: View {
         .onAppear {
             textValue = value > 0 ? String(format: "%.\(decimalPlaces)f", value * 100) : ""
         }
+        .onChange(of: value) { _, newValue in
+            guard !isFocused else { return }
+            let formatted = newValue > 0 ? String(format: "%.\(decimalPlaces)f", newValue * 100) : ""
+            if textValue != formatted {
+                textValue = formatted
+            }
+        }
     }
 }
 
@@ -164,6 +178,13 @@ struct NumberField: View {
         }
         .onAppear {
             textValue = value > 0 ? String(value) : ""
+        }
+        .onChange(of: value) { _, newValue in
+            guard !isFocused else { return }
+            let formatted = newValue > 0 ? String(newValue) : ""
+            if textValue != formatted {
+                textValue = formatted
+            }
         }
     }
 }

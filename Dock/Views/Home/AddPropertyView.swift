@@ -178,6 +178,9 @@ struct AddPropertyView: View {
                     HStack(spacing: 12) {
                         NumberField(title: "Year Built", value: $viewModel.property.yearBuilt)
                         ModernStepperField(title: "Units", value: $viewModel.property.unitCount, range: 1...100, cardBackground: cardBackground)
+                            .onChange(of: viewModel.property.unitCount) { _, newValue in
+                                viewModel.property.estimatedTotalRent = viewModel.property.estimatedRentPerUnit * Double(newValue)
+                            }
                     }
                     
                     // Property Type
@@ -225,6 +228,9 @@ struct AddPropertyView: View {
                 // Purchase Price
                 ModernFormSection(title: "Purchase", icon: "dollarsign.circle.fill", cardBackground: cardBackground) {
                     CurrencyField(title: "Purchase Price", value: $viewModel.property.financing.purchasePrice)
+                        .onChange(of: viewModel.property.financing.purchasePrice) { _, _ in
+                            viewModel.property.financing.updateLoanFromLTV()
+                        }
                     CurrencyField(title: "Closing Costs", value: $viewModel.property.financing.closingCosts)
                 }
                 

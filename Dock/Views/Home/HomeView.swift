@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var selectedProperty: Property?
     @State private var showingFilters = false
     @State private var showingSearch = false
+    @State private var dropTargetedFolderID: UUID?
     @Environment(\.colorScheme) private var colorScheme
     @Namespace private var namespace
     
@@ -128,9 +129,20 @@ struct HomeView: View {
                             Image(systemName: "arrow.up.arrow.down")
                         }
                         
-                        Button {
-                            showingAddProperty = true
-                            HapticManager.shared.impact(.medium)
+                        Menu {
+                            Button {
+                                showingAddProperty = true
+                                HapticManager.shared.impact(.medium)
+                            } label: {
+                                Label("Add Property", systemImage: "building.2")
+                            }
+                            
+                            Button {
+                                viewModel.showingFolderSheet = true
+                                HapticManager.shared.impact(.medium)
+                            } label: {
+                                Label("Create Folder", systemImage: "folder.badge.plus")
+                            }
                         } label: {
                             Image(systemName: "plus")
                         }
@@ -142,6 +154,27 @@ struct HomeView: View {
                     Task {
                         await viewModel.addProperty(property)
                     }
+                }
+            }
+            .sheet(isPresented: $viewModel.showingFolderSheet) {
+                CreateFolderSheet(
+                    folderName: $viewModel.newFolderName,
+                    folderColor: $viewModel.newFolderColor
+                ) {
+                    // Create folder
+                    Task {
+                        await viewModel.createFolder(
+                            name: viewModel.newFolderName,
+                            colorHex: viewModel.newFolderColor
+                        )
+                        viewModel.newFolderName = ""
+                        viewModel.newFolderColor = "#007AFF"
+                        viewModel.showingFolderSheet = false
+                    }
+                } onCancel: {
+                    viewModel.newFolderName = ""
+                    viewModel.newFolderColor = "#007AFF"
+                    viewModel.showingFolderSheet = false
                 }
             }
             .navigationDestination(item: $selectedProperty) { property in
@@ -186,86 +219,124 @@ struct HomeView: View {
     
     private var mainContent: some View {
         LazyVStack(spacing: 20) {
-            // Folders
+            // Stacked Folders with properties
             if !viewModel.folders.isEmpty {
-                foldersSection
+                stackedFoldersSection
             }
             
-            // Properties
-            propertyCards
+            // Properties without folders
+            unfolderedPropertyCards
         }
         .padding(.vertical, 8)
     }
     
-    // MARK: - Folders Section
+    // MARK: - Stacked Folders Section
     
-    private var foldersSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                // All properties
-                ModernFolderChip(
-                    name: "All",
-                    count: viewModel.properties.count,
-                    color: .primary,
-                    isSelected: viewModel.selectedFolder == nil,
-                    colorScheme: colorScheme
-                ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        viewModel.selectedFolder = nil
-                    }
-                }
-                
-                // Pinned
-                if viewModel.pinnedCount > 0 {
-                    ModernFolderChip(
-                        name: "Pinned",
-                        count: viewModel.pinnedCount,
-                        color: .orange,
-                        isSelected: false,
-                        icon: "pin.fill",
-                        colorScheme: colorScheme
-                    ) {
-                        // Filter to pinned
-                    }
-                }
-                
-                // Custom folders
-                ForEach(viewModel.folders) { folder in
-                    ModernFolderChip(
-                        name: folder.name,
-                        count: viewModel.properties.filter { $0.folderID == folder.id }.count,
-                        color: folder.color,
-                        isSelected: viewModel.selectedFolder?.id == folder.id,
-                        colorScheme: colorScheme
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.selectedFolder = folder
+    private var stackedFoldersSection: some View {
+        VStack(spacing: 24) {
+            ForEach(viewModel.folders) { folder in
+                StackedFolderView(
+                    folder: folder,
+                    properties: viewModel.propertiesInFolder(folder),
+                    isExpanded: viewModel.isFolderExpanded(folder),
+                    cardBackground: cardBackground,
+                    colorScheme: colorScheme,
+                    namespace: namespace,
+                    onToggleExpand: {
+                        withAnimation(.interactiveSpring(response: 0.6, dampingFraction: 0.7, blendDuration: 0.5)) {
+                            viewModel.toggleFolderExpansion(folder)
+                        }
+                    },
+                    onPropertyTap: { property in
+                        selectedProperty = property
+                        HapticManager.shared.impact(.light)
+                    },
+                    onPropertyPin: { property in
+                        Task {
+                            await viewModel.togglePin(property)
+                        }
+                    },
+                    onPropertyDelete: { property in
+                        Task {
+                            await viewModel.deleteProperty(property)
+                        }
+                    },
+                    onPropertyDrop: { property in
+                        Task {
+                            await viewModel.moveToFolder(property, folder: folder)
+                        }
+                    },
+                    onRemoveFromFolder: { property in
+                        Task {
+                            await viewModel.moveToFolder(property, folder: nil)
+                        }
+                    },
+                    onDeleteFolder: {
+                        Task {
+                            await viewModel.deleteFolder(folder)
                         }
                     }
+                )
+                .padding(.vertical, 8)
+                .background {
+                    if dropTargetedFolderID == folder.id {
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(folder.color, lineWidth: 2.5)
+                            .background(folder.color.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 24))
+                            .padding(.horizontal, 8)
+                    }
                 }
-                
-                // Add folder button
-                Button {
-                    viewModel.showingFolderSheet = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(cardBackground)
-                        .clipShape(Circle())
+                .dropDestination(for: String.self) { items, _ in
+                    guard let propertyIDString = items.first,
+                          let propertyID = UUID(uuidString: propertyIDString),
+                          let property = viewModel.properties.first(where: { $0.id == propertyID }) else {
+                        return false
+                    }
+                    // Don't move if already in this folder
+                    guard property.folderID != folder.id else { return false }
+                    
+                    Task {
+                        await viewModel.moveToFolder(property, folder: folder)
+                    }
+                    HapticManager.shared.success()
+                    return true
+                } isTargeted: { isTargeted in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        dropTargetedFolderID = isTargeted ? folder.id : nil
+                    }
                 }
             }
-            .padding(.horizontal, 20)
         }
     }
     
-    // MARK: - Property Cards
+    // MARK: - Unfoldered Properties Header
     
-    private var propertyCards: some View {
-        LazyVStack(spacing: 16) {
-            ForEach(viewModel.displayedProperties) { property in
+    private var unfolderedPropertiesHeader: some View {
+        HStack {
+            Text("Properties")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            
+            Spacer()
+            
+            Text("\(viewModel.propertiesWithoutFolder().count)")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal)
+        .padding(.top, viewModel.folders.isEmpty ? 0 : 8)
+    }
+    
+    // MARK: - Unfoldered Property Cards
+    
+    private var unfolderedPropertyCards: some View {
+        VStack(spacing: 16) {
+            if !viewModel.folders.isEmpty && !viewModel.propertiesWithoutFolder().isEmpty {
+                unfolderedPropertiesHeader
+            }
+            
+            ForEach(filteredUnfolderedProperties) { property in
                 PropertyCard(
                     property: property,
                     cardBackground: cardBackground,
@@ -286,10 +357,34 @@ struct HomeView: View {
                     selectedProperty = property
                     HapticManager.shared.impact(.light)
                 }
+                .draggable(property.id.uuidString)
             }
         }
         .padding(.horizontal)
     }
+    
+    // MARK: - Filtered Unfoldered Properties
+    
+    private var filteredUnfolderedProperties: [Property] {
+        var result = viewModel.propertiesWithoutFolder()
+        
+        // Apply search filter
+        if !viewModel.searchText.isEmpty {
+            result = result.filter {
+                $0.address.localizedCaseInsensitiveContains(viewModel.searchText) ||
+                $0.city.localizedCaseInsensitiveContains(viewModel.searchText) ||
+                $0.state.localizedCaseInsensitiveContains(viewModel.searchText) ||
+                $0.zipCode.localizedCaseInsensitiveContains(viewModel.searchText)
+            }
+        }
+        
+        // Pinned first
+        let pinned = result.filter { $0.isPinned }
+        let unpinned = result.filter { !$0.isPinned }
+        
+        return pinned + unpinned
+    }
+    
     
     // MARK: - Empty State
     

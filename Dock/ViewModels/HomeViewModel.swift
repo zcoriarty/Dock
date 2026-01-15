@@ -27,6 +27,11 @@ final class HomeViewModel {
     var showingFolderSheet: Bool = false
     var selectedProperty: Property?
     
+    // Expanded folder tracking for stacked view
+    var expandedFolderIDs: Set<UUID> = []
+    var newFolderName: String = ""
+    var newFolderColor: String = "#007AFF"
+    
     // Market Rates
     var currentRates: RateData?
     var marketRateItems: [MarketRateItem] = []
@@ -267,10 +272,38 @@ final class HomeViewModel {
                 if selectedFolder?.id == folder.id {
                     selectedFolder = nil
                 }
+                
+                // Remove from expanded set if needed
+                expandedFolderIDs.remove(folder.id)
             }
         } catch {
             errorMessage = "Failed to delete folder: \(error.localizedDescription)"
         }
+    }
+    
+    // MARK: - Folder Expansion
+    
+    func toggleFolderExpansion(_ folder: PropertyFolder) {
+        if expandedFolderIDs.contains(folder.id) {
+            expandedFolderIDs.remove(folder.id)
+        } else {
+            expandedFolderIDs.insert(folder.id)
+        }
+        HapticManager.shared.impact(.light)
+    }
+    
+    func isFolderExpanded(_ folder: PropertyFolder) -> Bool {
+        expandedFolderIDs.contains(folder.id)
+    }
+    
+    func propertiesInFolder(_ folder: PropertyFolder) -> [Property] {
+        let folderProperties = properties.filter { $0.folderID == folder.id }
+        return sortProperties(folderProperties)
+    }
+    
+    func propertiesWithoutFolder() -> [Property] {
+        let unfolderedProperties = properties.filter { $0.folderID == nil }
+        return sortProperties(unfolderedProperties)
     }
     
     // MARK: - Sorting
@@ -398,6 +431,17 @@ final class HomeViewModel {
         entity.recommendation = property.metrics.recommendation.rawValue
         entity.photoURLs = property.photoURLs as NSArray
         entity.primaryPhotoData = property.primaryPhotoData
+        
+        // Set folder relationship
+        if let folderID = property.folderID {
+            let folderRequest: NSFetchRequest<FolderEntity> = FolderEntity.fetchRequest()
+            folderRequest.predicate = NSPredicate(format: "id == %@", folderID as CVarArg)
+            if let folderEntity = try? viewContext.fetch(folderRequest).first {
+                entity.folder = folderEntity
+            }
+        } else {
+            entity.folder = nil
+        }
     }
     
     private func mapEntityToFolder(_ entity: FolderEntity) -> PropertyFolder {
