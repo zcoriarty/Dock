@@ -332,12 +332,12 @@ struct HomeView: View {
     
     private var unfolderedPropertyCards: some View {
         VStack(spacing: 16) {
-            if !viewModel.folders.isEmpty && !viewModel.propertiesWithoutFolder().isEmpty {
+            if !viewModel.propertiesWithoutFolder().isEmpty {
                 unfolderedPropertiesHeader
             }
             
             ForEach(filteredUnfolderedProperties) { property in
-                PropertyCard(
+                SwipeablePropertyCard(
                     property: property,
                     cardBackground: cardBackground,
                     colorScheme: colorScheme,
@@ -350,13 +350,13 @@ struct HomeView: View {
                         Task {
                             await viewModel.deleteProperty(property)
                         }
+                    },
+                    onTap: {
+                        selectedProperty = property
+                        HapticManager.shared.impact(.light)
                     }
                 )
                 .matchedTransitionSource(id: property.id, in: namespace)
-                .onTapGesture {
-                    selectedProperty = property
-                    HapticManager.shared.impact(.light)
-                }
                 .draggable(property.id.uuidString)
             }
         }

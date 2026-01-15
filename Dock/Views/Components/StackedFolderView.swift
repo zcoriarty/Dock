@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreData
 
 struct StackedFolderView: View {
     let folder: PropertyFolder
@@ -109,8 +110,8 @@ struct StackedFolderView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .clipped()
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
     
     // MARK: - Empty Folder Placeholder
@@ -172,6 +173,21 @@ struct StackedPropertyCard: View {
     let onDelete: () -> Void
     let onRemoveFromFolder: (() -> Void)?
     
+    // Swipe state
+    @State private var swipeOffset: CGFloat = 0
+    @State private var isRevealed: Bool = false
+    @State private var notes: [PropertyNote] = []
+    @State private var tags: [NoteTag] = []
+    @State private var showingAddNote: Bool = false
+    @State private var newNoteContent: String = ""
+    @State private var selectedTagIDs: Set<UUID> = []
+    @State private var isEditMode: Bool = false
+    @State private var noteToDelete: PropertyNote?
+    @State private var showingDeleteConfirmation: Bool = false
+    
+    private let revealWidth: CGFloat = 260
+    private let dragThreshold: CGFloat = 70
+    
     private var score: Double {
         property.metrics.overallScore
     }
@@ -218,21 +234,35 @@ struct StackedPropertyCard: View {
     }
     
     var body: some View {
-        Button {
+        ZStack(alignment: .trailing) {
+            // Notes panel (only when expanded)
             if isExpanded {
-                onTap()
-                HapticManager.shared.impact(.light)
-            } else {
-                // When collapsed, tapping expands the folder
-                withAnimation(.interactiveSpring(response: 0.6, dampingFraction: 0.7, blendDuration: 0.5)) {
-                    onExpand()
-                }
-                HapticManager.shared.impact(.light)
+                stackedNotesPanel
+                    .frame(width: revealWidth, height: 120)
+                    .opacity(swipeOffset < -20 ? 1 : 0)
             }
-        } label: {
+            
+            // Card content
             cardContent
+                .offset(x: isExpanded ? swipeOffset : 0)
+                .simultaneousGesture(isExpanded ? swipeGesture : nil)
+                .onTapGesture {
+                    if isRevealed {
+                        closeReveal()
+                    } else if isExpanded {
+                        onTap()
+                        HapticManager.shared.impact(.light)
+                    } else {
+                        withAnimation(.interactiveSpring(response: 0.6, dampingFraction: 0.7, blendDuration: 0.5)) {
+                            onExpand()
+                        }
+                        HapticManager.shared.impact(.light)
+                    }
+                }
         }
-        .buttonStyle(.plain)
+        .frame(height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: .black.opacity(isExpanded ? 0.08 : 0.12), radius: isExpanded ? 4 : 8, y: isExpanded ? 2 : 4)
         .offset(y: yOffset)
         .scaleEffect(scaleEffect)
         .opacity(opacity)
@@ -262,6 +292,180 @@ struct StackedPropertyCard: View {
             }
         }
         .draggable(property.id.uuidString)
+        .onAppear {
+            loadNotes()
+            loadTags()
+        }
+        .onChange(of: isExpanded) { _, expanded in
+            if !expanded {
+                closeReveal()
+            }
+        }
+        .sheet(isPresented: $showingAddNote) {
+            QuickAddNoteSheet(
+                propertyID: property.id,
+                availableTags: tags,
+                content: $newNoteContent,
+                selectedTagIDs: $selectedTagIDs,
+                onAdd: {
+                    Task {
+                        await addNote()
+                        showingAddNote = false
+                    }
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .alert("Delete Note?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                noteToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let note = noteToDelete {
+                    Task {
+                        await deleteNote(note)
+                    }
+                }
+            }
+        } message: {
+            Text("This note will be permanently deleted.")
+        }
+    }
+    
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                // Only handle horizontal swipes - check if horizontal movement dominates
+                let horizontal = abs(value.translation.width)
+                let vertical = abs(value.translation.height)
+                
+                // Require horizontal to be at least 1.5x vertical to be considered a swipe
+                guard horizontal > vertical * 1.5 else { return }
+                
+                let translation = value.translation.width
+                if isRevealed {
+                    let newOffset = -revealWidth + translation
+                    swipeOffset = min(0, max(-revealWidth, newOffset))
+                } else {
+                    swipeOffset = min(0, translation)
+                }
+            }
+            .onEnded { value in
+                // Only process if we actually moved the card
+                guard swipeOffset != 0 else { return }
+                
+                let velocity = value.velocity.width
+                let shouldReveal: Bool
+                
+                if isRevealed {
+                    shouldReveal = swipeOffset < -revealWidth / 2 && velocity < 500
+                } else {
+                    shouldReveal = swipeOffset < -dragThreshold || velocity < -500
+                }
+                
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    if shouldReveal {
+                        swipeOffset = -revealWidth
+                        isRevealed = true
+                    } else {
+                        swipeOffset = 0
+                        isRevealed = false
+                    }
+                }
+                
+                if shouldReveal {
+                    HapticManager.shared.impact(.light)
+                }
+            }
+    }
+    
+    private func closeReveal() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            swipeOffset = 0
+            isRevealed = false
+        }
+    }
+    
+    // MARK: - Stacked Notes Panel
+    
+    private var stackedNotesPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Header with action buttons
+            HStack(spacing: 6) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                
+                Text("Notes")
+                    .font(.system(size: 11))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                // Edit button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isEditMode.toggle()
+                    }
+                    HapticManager.shared.impact(.light)
+                } label: {
+                    Image(systemName: isEditMode ? "checkmark" : "pencil")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 24, height: 24)
+                }
+                .glassEffect(.regular, in: .circle)
+                
+                // Add button
+                Button {
+                    showingAddNote = true
+                    HapticManager.shared.impact(.light)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 24, height: 24)
+                }
+                .glassEffect(.regular, in: .circle)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            
+            if notes.isEmpty {
+                // Empty state
+                VStack(spacing: 4) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.tertiary)
+                    Text("No notes")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // Notes in flow layout
+                ScrollView(.vertical, showsIndicators: false) {
+                    NoteCapsuleFlowLayout(spacing: 4) {
+                        ForEach(notes) { note in
+                            StackedNoteCapsule(
+                                note: note,
+                                isEditMode: isEditMode,
+                                colorScheme: colorScheme,
+                                onDelete: {
+                                    noteToDelete = note
+                                    showingDeleteConfirmation = true
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
     
     private var cardContent: some View {
@@ -314,7 +518,6 @@ struct StackedPropertyCard: View {
         .frame(height: 120)
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(isExpanded ? 0.08 : 0.12), radius: isExpanded ? 4 : 8, y: isExpanded ? 2 : 4)
     }
     
     @ViewBuilder
@@ -384,6 +587,144 @@ struct StackedPropertyCard: View {
             .padding(.vertical, 3)
             .background((cashFlow >= 0 ? Color.green : Color.red).opacity(0.1))
             .clipShape(Capsule())
+    }
+    
+    // MARK: - Data Loading
+    
+    private func loadNotes() {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "property.id == %@", property.id as CVarArg)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \NoteEntity.createdAt, ascending: false)]
+        request.fetchLimit = 10
+        
+        do {
+            let entities = try context.fetch(request)
+            notes = entities.map { entity in
+                var tagIDs: [UUID] = []
+                if let tagIDsString = entity.tagIDs {
+                    tagIDs = tagIDsString.components(separatedBy: ",").compactMap { UUID(uuidString: $0) }
+                }
+                
+                return PropertyNote(
+                    id: entity.id ?? UUID(),
+                    createdAt: entity.createdAt ?? Date(),
+                    updatedAt: entity.updatedAt ?? Date(),
+                    areaName: entity.areaName ?? "",
+                    content: entity.content ?? "",
+                    sortOrder: Int(entity.sortOrder),
+                    tagIDs: tagIDs
+                )
+            }
+        } catch {
+            print("Failed to load notes: \(error)")
+        }
+    }
+    
+    private func loadTags() {
+        let tagsKey = "app.dock.noteTags"
+        if let data = UserDefaults.standard.data(forKey: tagsKey),
+           let loadedTags = try? JSONDecoder().decode([NoteTag].self, from: data) {
+            tags = loadedTags.sorted { $0.name < $1.name }
+        }
+    }
+    
+    private func addNote() async {
+        guard !newNoteContent.isEmpty else { return }
+        
+        let context = PersistenceController.shared.container.viewContext
+        let entity = NoteEntity(context: context)
+        entity.id = UUID()
+        entity.createdAt = Date()
+        entity.updatedAt = Date()
+        entity.content = newNoteContent
+        entity.sortOrder = Int16(notes.count)
+        entity.tagIDs = selectedTagIDs.map { $0.uuidString }.joined(separator: ",")
+        
+        let propertyRequest: NSFetchRequest<PropertyEntity> = PropertyEntity.fetchRequest()
+        propertyRequest.predicate = NSPredicate(format: "id == %@", property.id as CVarArg)
+        
+        do {
+            if let propertyEntity = try context.fetch(propertyRequest).first {
+                entity.property = propertyEntity
+            }
+            try context.save()
+            
+            let newNote = PropertyNote(
+                id: entity.id ?? UUID(),
+                createdAt: Date(),
+                content: newNoteContent,
+                tagIDs: Array(selectedTagIDs)
+            )
+            notes.insert(newNote, at: 0)
+            
+            newNoteContent = ""
+            selectedTagIDs = []
+            
+            HapticManager.shared.success()
+        } catch {
+            print("Failed to save note: \(error)")
+        }
+    }
+    
+    private func deleteNote(_ note: PropertyNote) async {
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", note.id as CVarArg)
+        
+        do {
+            if let entity = try context.fetch(request).first {
+                context.delete(entity)
+                try context.save()
+                notes.removeAll { $0.id == note.id }
+                noteToDelete = nil
+                HapticManager.shared.notification(.success)
+            }
+        } catch {
+            print("Failed to delete note: \(error)")
+        }
+    }
+}
+
+// MARK: - Stacked Note Capsule (Compact)
+
+struct StackedNoteCapsule: View {
+    let note: PropertyNote
+    let isEditMode: Bool
+    let colorScheme: ColorScheme
+    let onDelete: () -> Void
+    
+    var body: some View {
+        Button {
+            if isEditMode {
+                onDelete()
+                HapticManager.shared.impact(.medium)
+            }
+        } label: {
+            HStack(spacing: 3) {
+                if isEditMode {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                }
+                
+                Text(note.content)
+                    .font(.system(size: 10))
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isEditMode ? Color.red.opacity(0.3) : Color.clear, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: isEditMode)
     }
 }
 
