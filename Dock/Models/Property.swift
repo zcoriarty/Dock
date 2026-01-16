@@ -108,6 +108,7 @@ struct Property: Identifiable, Hashable, Sendable {
         financing: FinancingInputs = FinancingInputs(),
         thresholds: InvestmentThresholds = InvestmentThresholds(),
         marketData: MarketData? = nil,
+        checklist: PropertyChecklist = PropertyChecklist.defaultChecklist,
         folderID: UUID? = nil,
         photoURLs: [String] = [],
         primaryPhotoData: Data? = nil
@@ -146,7 +147,7 @@ struct Property: Identifiable, Hashable, Sendable {
         self.folderID = folderID
         self.photoURLs = photoURLs
         self.primaryPhotoData = primaryPhotoData
-        self.checklist = PropertyChecklist.defaultChecklist
+        self.checklist = checklist
     }
     
     var fullAddress: String {

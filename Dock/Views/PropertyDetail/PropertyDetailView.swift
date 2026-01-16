@@ -10,6 +10,7 @@ import SwiftUI
 struct PropertyDetailView: View {
     @State private var viewModel: PropertyDetailViewModel
     @State private var showingDealOptimizer: Bool = false
+    @State private var showingChecklist: Bool = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
@@ -203,8 +204,6 @@ struct PropertyDetailView: View {
                             marketSection
                         case .risk:
                             riskSection
-                        case .checklist:
-                            ChecklistSectionView(viewModel: viewModel)
                         case .notes:
                             notesSection
                         }
@@ -218,6 +217,14 @@ struct PropertyDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingChecklist = true
+                } label: {
+                    Image(systemName: "checkmark.rectangle.fill")
+                        .fontWeight(.medium)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -257,6 +264,19 @@ struct PropertyDetailView: View {
         }
         .sheet(isPresented: $showingDealOptimizer) {
             DealOptimizerSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingChecklist) {
+            NavigationStack {
+                ScrollView {
+                    ChecklistSectionView(viewModel: viewModel)
+                        .padding(.top, 16)
+                        .padding(.bottom, 40)
+                }
+                .navigationTitle("Checklist")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
     

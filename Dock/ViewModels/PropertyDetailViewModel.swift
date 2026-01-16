@@ -40,7 +40,6 @@ final class PropertyDetailViewModel {
         case economics = "Economics"
         case market = "Market"
         case risk = "Risk"
-        case checklist = "Checklist"
         case notes = "Notes"
         
         var id: String { rawValue }
@@ -51,9 +50,8 @@ final class PropertyDetailViewModel {
             case .economics: return "dollarsign.circle.fill"
             case .market: return "chart.line.uptrend.xyaxis"
             case .risk: return "exclamationmark.shield.fill"
-            case .checklist: return "checkmark.rectangle.fill"
-            case .notes: return "note.text"
-            }
+        case .notes: return "note.text"
+        }
         }
     }
     
@@ -66,6 +64,7 @@ final class PropertyDetailViewModel {
     private let insuranceService = InsuranceService.shared
     
     private var onSave: ((Property) async -> Void)?
+    private var checklistSaveTask: Task<Void, Never>?
     
     // MARK: - Init
     
@@ -280,10 +279,12 @@ final class PropertyDetailViewModel {
     
     // MARK: - Save
     
-    func save() async {
+    func save(emitHaptics: Bool = true) async {
         property.updatedAt = Date()
         await onSave?(property)
-        HapticManager.shared.success()
+        if emitHaptics {
+            HapticManager.shared.success()
+        }
     }
     
     // MARK: - Updates
@@ -340,6 +341,7 @@ final class PropertyDetailViewModel {
         if let sectionIndex = property.checklist.sections.firstIndex(where: { $0.id == sectionId }),
            let itemIndex = property.checklist.sections[sectionIndex].items.firstIndex(where: { $0.id == itemId }) {
             property.checklist.sections[sectionIndex].items[itemIndex].answer = answer
+            scheduleChecklistSave()
         }
     }
     
@@ -347,6 +349,7 @@ final class PropertyDetailViewModel {
         if let sectionIndex = property.checklist.sections.firstIndex(where: { $0.id == sectionId }),
            let itemIndex = property.checklist.sections[sectionIndex].items.firstIndex(where: { $0.id == itemId }) {
             property.checklist.sections[sectionIndex].items[itemIndex].note = note
+            scheduleChecklistSave()
         }
     }
     
@@ -360,6 +363,15 @@ final class PropertyDetailViewModel {
             Task {
                 await save()
             }
+        }
+    }
+
+    private func scheduleChecklistSave() {
+        checklistSaveTask?.cancel()
+        checklistSaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !Task.isCancelled else { return }
+            await self.save(emitHaptics: false)
         }
     }
 }

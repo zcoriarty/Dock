@@ -164,7 +164,6 @@ final class NotesViewModel {
             }
             try viewContext.save()
             notes.append(note)
-            HapticManager.shared.success()
         } catch {
             errorMessage = "Failed to save note: \(error.localizedDescription)"
         }

@@ -332,7 +332,14 @@ final class HomeViewModel {
     // MARK: - Entity Mapping
     
     private func mapEntityToProperty(_ entity: PropertyEntity) -> Property {
-        Property(
+        let checklist: PropertyChecklist = {
+            guard let data = entity.checklistData else {
+                return PropertyChecklist.defaultChecklist
+            }
+            return (try? JSONDecoder().decode(PropertyChecklist.self, from: data))
+                ?? PropertyChecklist.defaultChecklist
+        }()
+        return Property(
             id: entity.id ?? UUID(),
             createdAt: entity.createdAt ?? Date(),
             updatedAt: entity.updatedAt ?? Date(),
@@ -380,6 +387,7 @@ final class HomeViewModel {
                 vacancyRate: entity.marketVacancy,
                 daysOnMarket: Int(entity.marketDOM)
             ),
+            checklist: checklist,
             folderID: entity.folder?.id,
             photoURLs: entity.photoURLs as? [String] ?? [],
             primaryPhotoData: entity.primaryPhotoData
@@ -431,6 +439,7 @@ final class HomeViewModel {
         entity.recommendation = property.metrics.recommendation.rawValue
         entity.photoURLs = property.photoURLs as NSArray
         entity.primaryPhotoData = property.primaryPhotoData
+        entity.checklistData = try? JSONEncoder().encode(property.checklist)
         
         // Set folder relationship
         if let folderID = property.folderID {
