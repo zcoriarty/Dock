@@ -40,6 +40,7 @@ final class PropertyDetailViewModel {
         case economics = "Economics"
         case market = "Market"
         case risk = "Risk"
+        case checklist = "Checklist"
         case notes = "Notes"
         
         var id: String { rawValue }
@@ -50,6 +51,7 @@ final class PropertyDetailViewModel {
             case .economics: return "dollarsign.circle.fill"
             case .market: return "chart.line.uptrend.xyaxis"
             case .risk: return "exclamationmark.shield.fill"
+            case .checklist: return "checkmark.rectangle.fill"
             case .notes: return "note.text"
             }
         }
@@ -317,5 +319,47 @@ final class PropertyDetailViewModel {
     func updateThreshold<T>(_ keyPath: WritableKeyPath<InvestmentThresholds, T>, value: T) {
         property.thresholds[keyPath: keyPath] = value
         HapticManager.shared.editField()
+    }
+    
+    // MARK: - Checklist
+    
+    func toggleChecklistItem(_ itemId: UUID, in sectionId: UUID) {
+        if let sectionIndex = property.checklist.sections.firstIndex(where: { $0.id == sectionId }),
+           let itemIndex = property.checklist.sections[sectionIndex].items.firstIndex(where: { $0.id == itemId }) {
+            property.checklist.sections[sectionIndex].items[itemIndex].isChecked.toggle()
+            HapticManager.shared.selection()
+            
+            // Auto-save
+            Task {
+                await save()
+            }
+        }
+    }
+    
+    func updateChecklistAnswer(_ answer: String, for itemId: UUID, in sectionId: UUID) {
+        if let sectionIndex = property.checklist.sections.firstIndex(where: { $0.id == sectionId }),
+           let itemIndex = property.checklist.sections[sectionIndex].items.firstIndex(where: { $0.id == itemId }) {
+            property.checklist.sections[sectionIndex].items[itemIndex].answer = answer
+        }
+    }
+    
+    func updateChecklistNote(_ note: String, for itemId: UUID, in sectionId: UUID) {
+        if let sectionIndex = property.checklist.sections.firstIndex(where: { $0.id == sectionId }),
+           let itemIndex = property.checklist.sections[sectionIndex].items.firstIndex(where: { $0.id == itemId }) {
+            property.checklist.sections[sectionIndex].items[itemIndex].note = note
+        }
+    }
+    
+    func toggleChecklistFlag(_ itemId: UUID, in sectionId: UUID) {
+        if let sectionIndex = property.checklist.sections.firstIndex(where: { $0.id == sectionId }),
+           let itemIndex = property.checklist.sections[sectionIndex].items.firstIndex(where: { $0.id == itemId }) {
+            property.checklist.sections[sectionIndex].items[itemIndex].isFlagged.toggle()
+            HapticManager.shared.warning()
+            
+            // Auto-save
+            Task {
+                await save()
+            }
+        }
     }
 }

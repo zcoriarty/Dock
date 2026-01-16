@@ -203,6 +203,8 @@ struct PropertyDetailView: View {
                             marketSection
                         case .risk:
                             riskSection
+                        case .checklist:
+                            ChecklistSectionView(viewModel: viewModel)
                         case .notes:
                             notesSection
                         }

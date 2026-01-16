@@ -61,6 +61,9 @@ struct Property: Identifiable, Hashable, Sendable {
     // Market Data
     var marketData: MarketData?
     
+    // Checklist
+    var checklist: PropertyChecklist
+    
     // Calculated Metrics (computed on demand)
     var metrics: DealMetrics {
         UnderwritingEngine.calculateMetrics(for: self)
@@ -143,6 +146,7 @@ struct Property: Identifiable, Hashable, Sendable {
         self.folderID = folderID
         self.photoURLs = photoURLs
         self.primaryPhotoData = primaryPhotoData
+        self.checklist = PropertyChecklist.defaultChecklist
     }
     
     var fullAddress: String {
