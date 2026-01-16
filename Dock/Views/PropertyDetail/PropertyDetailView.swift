@@ -2078,9 +2078,9 @@ struct DealOptimizerSheet: View {
                     range: priceRange,
                     step: 5000,
                     format: .currency,
-                    accentColor: .blue
+                    accentColor: .primary
                 )
-                
+
                 // Monthly Rent Slider
                 OptimizerSlider(
                     title: "Monthly Rent",
@@ -2088,9 +2088,9 @@ struct DealOptimizerSheet: View {
                     range: rentRange,
                     step: 50,
                     format: .currency,
-                    accentColor: .green
+                    accentColor: .primary
                 )
-                
+
                 // Interest Rate Slider
                 OptimizerSlider(
                     title: "Interest Rate",
@@ -2098,9 +2098,9 @@ struct DealOptimizerSheet: View {
                     range: 0.04...0.12,
                     step: 0.0025,
                     format: .percent,
-                    accentColor: .orange
+                    accentColor: .primary
                 )
-                
+
                 // LTV (Down Payment) Slider
                 OptimizerSlider(
                     title: "Loan-to-Value (LTV)",
@@ -2109,7 +2109,7 @@ struct DealOptimizerSheet: View {
                     step: 0.05,
                     format: .percent,
                     subtitle: "Down Payment: \((purchasePrice * (1 - ltv)).asCompactCurrency)",
-                    accentColor: .purple
+                    accentColor: .primary
                 )
             }
             .padding(16)
