@@ -22,6 +22,7 @@ final class PropertyDetailViewModel {
     var showingFinancing: Bool = false
     var showingSensitivity: Bool = false
     var activeSection: DetailSection = .summary
+    var listingDetails: PropertyData?
     
     // MARK: - Computed
     
@@ -38,6 +39,7 @@ final class PropertyDetailViewModel {
     enum DetailSection: String, CaseIterable, Identifiable {
         case summary = "Summary"
         case economics = "Economics"
+        case details = "Details"
         case market = "Market"
         case risk = "Risk"
         case notes = "Notes"
@@ -48,10 +50,11 @@ final class PropertyDetailViewModel {
             switch self {
             case .summary: return "chart.pie.fill"
             case .economics: return "dollarsign.circle.fill"
+            case .details: return "doc.plaintext"
             case .market: return "chart.line.uptrend.xyaxis"
             case .risk: return "exclamationmark.shield.fill"
-        case .notes: return "note.text"
-        }
+            case .notes: return "note.text"
+            }
         }
     }
     
@@ -104,19 +107,14 @@ final class PropertyDetailViewModel {
         guard !fullAddress.isEmpty else { return }
         
         // Check if we have a valid photo already
-        let hasValidPhoto = property.primaryPhotoData != nil && 
+        let hasValidPhoto = property.primaryPhotoData != nil &&
                            UIImage(data: property.primaryPhotoData!) != nil
-        
-        // Skip if we already have a valid photo
-        if hasValidPhoto {
-            print("📸 Property already has a valid photo, skipping refresh")
-            return
-        }
-        
+
         print("🔄 Refreshing property data for: \(fullAddress)")
         
         do {
             let propertyData = try await propertyService.fetchPropertyByAddress(fullAddress)
+            listingDetails = propertyData
             
             // Update photo URLs and listing URL from fresh data
             var didUpdate = false
@@ -130,16 +128,18 @@ final class PropertyDetailViewModel {
             }
             
             // Download the photo
-            let photoURLToTry = propertyData.primaryPhotoURL ?? propertyData.photoURLs.first
-            if let photoURLString = photoURLToTry,
-               let imageURL = URL(string: photoURLString) {
-                print("📸 Downloading photo from: \(photoURLString)")
-                let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
-                property.primaryPhotoData = imageData
-                didUpdate = true
-                print("📸 Photo downloaded successfully (\(imageData.count) bytes)")
-            } else {
-                print("⚠️ No photo URL available from API")
+            if !hasValidPhoto {
+                let photoURLToTry = propertyData.primaryPhotoURL ?? propertyData.photoURLs.first
+                if let photoURLString = photoURLToTry,
+                   let imageURL = URL(string: photoURLString) {
+                    print("📸 Downloading photo from: \(photoURLString)")
+                    let imageData = try await NetworkManager.shared.fetchData(url: imageURL)
+                    property.primaryPhotoData = imageData
+                    didUpdate = true
+                    print("📸 Photo downloaded successfully (\(imageData.count) bytes)")
+                } else {
+                    print("⚠️ No photo URL available from API")
+                }
             }
             
             if didUpdate {
@@ -162,6 +162,7 @@ final class PropertyDetailViewModel {
         
         do {
             let propertyData = try await propertyService.fetchProperty(from: url)
+            listingDetails = propertyData
             
             // Update property with fetched data
             property.listingURL = propertyData.listingURL ?? url

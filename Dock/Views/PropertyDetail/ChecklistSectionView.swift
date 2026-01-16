@@ -22,30 +22,59 @@ struct ChecklistSectionView: View {
         }
     }
     
+    @Environment(\.colorScheme) private var colorScheme
+    
     var body: some View {
         VStack(spacing: 20) {
             // Overall Progress
-            VStack(spacing: 8) {
+            VStack(spacing: 12) {
                 HStack {
-                    Text("Tour Checklist")
-                        .font(.headline)
+                    HStack(spacing: 8) {
+                        Image(systemName: checklistIconName)
+                            .font(.title3)
+                            .foregroundStyle(progressColor)
+                        
+                        Text("Tour Checklist")
+                            .font(.headline)
+                    }
                     
                     Spacer()
                     
                     Text(viewModel.property.checklist.totalProgress.asPercent())
                         .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(viewModel.property.checklist.totalProgress == 1.0 ? .green : .secondary)
+                        .fontWeight(.bold)
+                        .foregroundStyle(progressColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(progressColor.opacity(0.12))
+                        .clipShape(Capsule())
                 }
                 
-                ProgressView(value: viewModel.property.checklist.totalProgress)
-                    .tint(viewModel.property.checklist.totalProgress == 1.0 ? .green : .blue)
+                // Custom progress bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(height: 6)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(progressColor)
+                            .frame(width: geometry.size.width * viewModel.property.checklist.totalProgress, height: 6)
+                    }
+                }
+                .frame(height: 6)
             }
             .padding(20)
-            .background(Color(white: 0.97)) // Light gray background
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(colorScheme == .dark ? Color(white: 0.12) : Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08), radius: 12, x: 0, y: 4)
             .padding(.horizontal, 20)
-            .colorScheme(.light) // Force light mode appearance for consistency if desired, or remove
             
             // Sections
             LazyVStack(spacing: 16) {
@@ -61,6 +90,28 @@ struct ChecklistSectionView: View {
         }
         .onAppear {
             setupInitialExpansion()
+        }
+    }
+    
+    private var checklistIconName: String {
+        let progress = viewModel.property.checklist.totalProgress
+        if progress == 0 {
+            return "checklist.unchecked"
+        } else if progress == 1.0 {
+            return "checklist.checked"
+        } else {
+            return "checklist"
+        }
+    }
+    
+    private var progressColor: Color {
+        let progress = viewModel.property.checklist.totalProgress
+        if progress == 1.0 {
+            return .green
+        } else if progress > 0 {
+            return .blue
+        } else {
+            return .secondary
         }
     }
     
@@ -84,6 +135,8 @@ struct ChecklistSectionCard: View {
     var viewModel: PropertyDetailViewModel
     @Environment(\.colorScheme) private var colorScheme
     
+    private var sectionProgress: Double { section.progress }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -92,37 +145,58 @@ struct ChecklistSectionCard: View {
                     isExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: section.type.icon)
-                        .font(.title3)
-                        .foregroundStyle(.blue)
-                        .frame(width: 24)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(section.title)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(section.title)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            
+                            Text(section.type.rawValue)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                         
-                        Text("\(Int(section.progress * 100))% Complete")
-                            .font(.caption)
+                        Spacer()
+                        
+                        // Progress percentage
+                        Text("\(Int(sectionProgress * 100))%")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     }
                     
-                    Spacer()
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    // Mini progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.secondary.opacity(0.12))
+                                .frame(height: 3)
+                            
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(sectionProgress == 1.0 ? Color.green : Color.blue)
+                                .frame(width: geometry.size.width * sectionProgress, height: 3)
+                        }
+                    }
+                    .frame(height: 3)
                 }
                 .padding(16)
-                .background(colorScheme == .dark ? Color(white: 0.1) : Color.white)
+                .background(colorScheme == .dark ? Color(white: 0.12) : Color.white)
             }
             .buttonStyle(.plain)
             
             // Items
             if isExpanded {
-                Divider()
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(height: 1)
                 
                 VStack(spacing: 0) {
                     ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
@@ -133,16 +207,22 @@ struct ChecklistSectionCard: View {
                         )
                         
                         if index < section.items.count - 1 {
-                            Divider()
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.1))
+                                .frame(height: 1)
                                 .padding(.leading, 52)
                         }
                     }
                 }
-                .background(colorScheme == .dark ? Color(white: 0.1) : Color.white)
+                .background(colorScheme == .dark ? Color(white: 0.12) : Color.white)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08), radius: 12, x: 0, y: 4)
     }
 }
 

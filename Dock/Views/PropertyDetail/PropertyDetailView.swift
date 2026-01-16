@@ -27,6 +27,17 @@ struct PropertyDetailView: View {
         colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
     }
     
+    private var checklistIconName: String {
+        let progress = viewModel.property.checklist.totalProgress
+        if progress == 0 {
+            return "checklist.unchecked"
+        } else if progress == 1.0 {
+            return "checklist.checked"
+        } else {
+            return "checklist"
+        }
+    }
+    
     private struct CapexReserveDetails {
         let baseReserve: Double
         let ageMultiplier: Double
@@ -200,6 +211,12 @@ struct PropertyDetailView: View {
                             summarySection
                         case .economics:
                             economicsSection
+                        case .details:
+                            PropertyDetailsTabView(
+                                property: viewModel.property,
+                                listingDetails: viewModel.listingDetails,
+                                cardBackground: cardBackground
+                            )
                         case .market:
                             marketSection
                         case .risk:
@@ -221,7 +238,7 @@ struct PropertyDetailView: View {
                 Button {
                     showingChecklist = true
                 } label: {
-                    Image(systemName: "checkmark.rectangle.fill")
+                    Image(systemName: checklistIconName)
                         .fontWeight(.medium)
                 }
             }

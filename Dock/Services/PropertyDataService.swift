@@ -207,8 +207,11 @@ actor PropertyDataService {
             lastSoldDate: response.lastSoldDate,
             listDate: response.listDate,
             source: response.source,
+            status: response.status,
             agentName: response.agentName,
-            brokerName: response.brokerName
+            brokerName: response.brokerName,
+            stories: response.stories,
+            parkingGarage: response.parkingGarage
         )
     }
     
@@ -290,8 +293,11 @@ struct PropertyData: Sendable {
     let lastSoldDate: String?
     let listDate: String?
     let source: String?
+    let status: String?
     let agentName: String?
     let brokerName: String?
+    let stories: Int?
+    let parkingGarage: Int?
     
     // Legacy initializer for backward compatibility
     init(
@@ -324,8 +330,11 @@ struct PropertyData: Sendable {
         lastSoldDate: String? = nil,
         listDate: String? = nil,
         source: String? = nil,
+        status: String? = nil,
         agentName: String? = nil,
-        brokerName: String? = nil
+        brokerName: String? = nil,
+        stories: Int? = nil,
+        parkingGarage: Int? = nil
     ) {
         self.address = address
         self.city = city
@@ -356,8 +365,11 @@ struct PropertyData: Sendable {
         self.lastSoldDate = lastSoldDate
         self.listDate = listDate
         self.source = source
+        self.status = status
         self.agentName = agentName
         self.brokerName = brokerName
+        self.stories = stories
+        self.parkingGarage = parkingGarage
     }
     
     static var mockData: PropertyData {
@@ -391,8 +403,11 @@ struct PropertyData: Sendable {
             lastSoldDate: nil,
             listDate: nil,
             source: "mock",
+            status: "for_sale",
             agentName: nil,
-            brokerName: nil
+            brokerName: nil,
+            stories: 2,
+            parkingGarage: 2
         )
     }
 }
@@ -432,6 +447,8 @@ struct DockPropertyResponse: Codable, Sendable {
     let description: String?
     let agentName: String?
     let brokerName: String?
+    let stories: Int?
+    let parkingGarage: Int?
 }
 
 struct DockSearchResponse: Codable, Sendable {
