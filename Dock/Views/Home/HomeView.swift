@@ -219,6 +219,10 @@ struct HomeView: View {
     
     private var mainContent: some View {
         LazyVStack(spacing: 20) {
+            if !viewModel.citySummaries.isEmpty || viewModel.isLoadingMarketSummaries {
+                marketSummarySection
+            }
+            
             // Stacked Folders with properties
             if !viewModel.folders.isEmpty {
                 stackedFoldersSection
@@ -228,6 +232,42 @@ struct HomeView: View {
             unfolderedPropertyCards
         }
         .padding(.vertical, 8)
+    }
+    
+    // MARK: - Market Summary Section
+    
+    private var marketSummarySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Market Snapshot")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                if viewModel.isLoadingMarketSummaries {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+            .padding(.horizontal)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    if viewModel.citySummaries.isEmpty {
+                        MarketSummarySkeletonCard()
+                        MarketSummarySkeletonCard()
+                    } else {
+                        ForEach(viewModel.citySummaries) { summary in
+                            CityMarketSummaryCard(summary: summary)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+            }
+        }
+        .padding(.top, 8)
     }
     
     // MARK: - Stacked Folders Section
@@ -430,6 +470,89 @@ struct HomeView: View {
             
             Spacer()
         }
+    }
+}
+
+// MARK: - Market Summary Card
+
+struct CityMarketSummaryCard: View {
+    let summary: CityMarketSummary
+    
+    private var averageRentText: String {
+        guard let value = summary.averageRent, value > 0 else { return "—" }
+        return value.asCurrency
+    }
+    
+    private var medianRentText: String {
+        guard let value = summary.medianRent, value > 0 else { return "—" }
+        return value.asCurrency
+    }
+    
+    private var newListingsText: String {
+        guard let value = summary.newListingsLastWeek else { return "—" }
+        return value.withCommas
+    }
+    
+    var body: some View {
+        GlassCard(cornerRadius: 18, padding: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(summary.city), \(summary.state)")
+                            .font(.headline)
+                        
+                        Text("\(summary.propertyCount) tracked")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack(spacing: 18) {
+                    summaryStat(value: averageRentText, label: "Avg Rent")
+                    summaryStat(value: medianRentText, label: "Median Rent")
+                    summaryStat(value: newListingsText, label: "New 7d")
+                }
+                
+            }
+        }
+        .frame(width: 280)
+    }
+    
+    private func summaryStat(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct MarketSummarySkeletonCard: View {
+    var body: some View {
+        GlassCard(cornerRadius: 18, padding: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                SkeletonView(height: 16)
+                    .frame(width: 160)
+                
+                SkeletonView(height: 12)
+                    .frame(width: 100)
+                
+                HStack(spacing: 18) {
+                    SkeletonView(height: 12)
+                        .frame(width: 70)
+                    SkeletonView(height: 12)
+                        .frame(width: 70)
+                    SkeletonView(height: 12)
+                        .frame(width: 60)
+                }
+            }
+        }
+        .frame(width: 280)
     }
 }
 

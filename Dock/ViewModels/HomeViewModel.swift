@@ -37,6 +37,10 @@ final class HomeViewModel {
     var marketRateItems: [MarketRateItem] = []
     var isLoadingRates: Bool = false
     
+    // Market Summaries
+    var citySummaries: [CityMarketSummary] = []
+    var isLoadingMarketSummaries: Bool = false
+    
     // MARK: - Filter & Sort
     
     enum SortOption: String, CaseIterable, Identifiable {
@@ -58,6 +62,16 @@ final class HomeViewModel {
             case .location: return "mappin.circle"
             case .score: return "star.circle"
             }
+        }
+    }
+    
+    struct TrackedCity: Identifiable, Hashable, Sendable {
+        let city: String
+        let state: String
+        let propertyCount: Int
+        
+        var id: String {
+            "\(city.lowercased())-\(state.lowercased())"
         }
     }
     
@@ -105,6 +119,42 @@ final class HomeViewModel {
         return capRates.reduce(0, +) / Double(capRates.count)
     }
     
+    var trackedCities: [TrackedCity] {
+        let filtered = properties.filter { !$0.city.isBlank && !$0.state.isBlank }
+        let grouped = Dictionary(grouping: filtered) { property in
+            let normalizedCity = normalizedCityName(city: property.city, state: property.state)
+            return "\(normalizedCity.lowercased())|\(property.state.lowercased())"
+        }
+        
+        return grouped.compactMap { _, group in
+            guard let first = group.first else { return nil }
+            let normalizedCity = normalizedCityName(city: first.city, state: first.state)
+            return TrackedCity(city: normalizedCity, state: first.state, propertyCount: group.count)
+        }
+        .sorted { $0.propertyCount > $1.propertyCount }
+    }
+    
+    private func normalizedCityName(city: String, state: String) -> String {
+        let trimmedCity = city.trimmed
+        let normalizedCity = trimmedCity.lowercased()
+        let normalizedState = state.trimmed.lowercased()
+        
+        let metroAliases: [String: [String: String]] = [
+            "mi": [
+                "kentwood": "Grand Rapids",
+                "ada": "Grand Rapids",
+                "rockford": "Grand Rapids"
+            ]
+        ]
+        
+        if let stateAliases = metroAliases[normalizedState],
+           let alias = stateAliases[normalizedCity] {
+            return alias
+        }
+        
+        return trimmedCity
+    }
+    
     
     // MARK: - Dependencies
     
@@ -126,6 +176,7 @@ final class HomeViewModel {
         defer { isLoading = false }
         
         await loadProperties()
+        await loadMarketSummaries()
         await loadFolders()
         await loadRates()
     }
@@ -144,6 +195,64 @@ final class HomeViewModel {
             currentRates = fallback
             marketRateItems = fallback.toMarketRateItems()
         }
+    }
+    
+    func loadMarketSummaries() async {
+        let tracked = trackedCities
+        guard !tracked.isEmpty else {
+            citySummaries = []
+            return
+        }
+        
+        isLoadingMarketSummaries = true
+        defer { isLoadingMarketSummaries = false }
+        
+        var summaries: [CityMarketSummary] = []
+        
+        await withTaskGroup(of: CityMarketSummary?.self) { group in
+            for trackedCity in tracked {
+                group.addTask {
+                    do {
+                        let response = try await MarketSummaryService.shared.fetchCitySummary(
+                            city: trackedCity.city,
+                            state: trackedCity.state
+                        )
+                        
+                        return CityMarketSummary(
+                            city: response.city,
+                            state: response.state,
+                            averageRent: response.averageRent,
+                            medianRent: response.medianRent,
+                            newListingsLastWeek: response.newListingsLastWeek,
+                            sampleSize: response.sampleSize,
+                            source: response.source,
+                            fetchedAt: Date(),
+                            propertyCount: trackedCity.propertyCount
+                        )
+                    } catch {
+                        return CityMarketSummary(
+                            city: trackedCity.city,
+                            state: trackedCity.state,
+                            averageRent: nil,
+                            medianRent: nil,
+                            newListingsLastWeek: nil,
+                            sampleSize: nil,
+                            source: nil,
+                            fetchedAt: Date(),
+                            propertyCount: trackedCity.propertyCount
+                        )
+                    }
+                }
+            }
+            
+            for await summary in group {
+                if let summary {
+                    summaries.append(summary)
+                }
+            }
+        }
+        
+        citySummaries = summaries.sorted { $0.propertyCount > $1.propertyCount }
     }
     
     private func loadProperties() async {
@@ -180,6 +289,7 @@ final class HomeViewModel {
             try viewContext.save()
             properties.insert(property, at: 0)
             HapticManager.shared.propertyAdded()
+            await loadMarketSummaries()
         } catch {
             errorMessage = "Failed to save property: \(error.localizedDescription)"
         }
@@ -197,6 +307,7 @@ final class HomeViewModel {
                 if let index = properties.firstIndex(where: { $0.id == property.id }) {
                     properties[index] = property
                 }
+                await loadMarketSummaries()
             }
         } catch {
             errorMessage = "Failed to update property: \(error.localizedDescription)"
@@ -213,6 +324,7 @@ final class HomeViewModel {
                 try viewContext.save()
                 properties.removeAll { $0.id == property.id }
                 HapticManager.shared.notification(.success)
+                await loadMarketSummaries()
             }
         } catch {
             errorMessage = "Failed to delete property: \(error.localizedDescription)"
