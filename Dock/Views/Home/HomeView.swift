@@ -220,7 +220,10 @@ struct HomeView: View {
     private var mainContent: some View {
         LazyVStack(spacing: 20) {
             if !viewModel.citySummaries.isEmpty || viewModel.isLoadingMarketSummaries {
-                marketSummarySection
+                MarketSnapshotSection(
+                    summaries: viewModel.citySummaries,
+                    isLoading: viewModel.isLoadingMarketSummaries
+                )
             }
             
             // Stacked Folders with properties
@@ -232,42 +235,6 @@ struct HomeView: View {
             unfolderedPropertyCards
         }
         .padding(.vertical, 8)
-    }
-    
-    // MARK: - Market Summary Section
-    
-    private var marketSummarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Market Snapshot")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                if viewModel.isLoadingMarketSummaries {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                }
-            }
-            .padding(.horizontal)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    if viewModel.citySummaries.isEmpty {
-                        MarketSummarySkeletonCard()
-                        MarketSummarySkeletonCard()
-                    } else {
-                        ForEach(viewModel.citySummaries) { summary in
-                            CityMarketSummaryCard(summary: summary)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-            }
-        }
-        .padding(.top, 8)
     }
     
     // MARK: - Stacked Folders Section
@@ -473,7 +440,7 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Market Summary Card
+// MARK: - Legacy Market Summary Card (kept for reference)
 
 struct CityMarketSummaryCard: View {
     let summary: CityMarketSummary
