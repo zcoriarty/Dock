@@ -283,7 +283,7 @@ actor PropertyDataService {
 
 // MARK: - Listing Type
 
-enum ListingType: String, CaseIterable {
+enum ListingType: String, CaseIterable, Codable {
     case forSale = "for_sale"
     case forRent = "for_rent"
     case sold = "sold"

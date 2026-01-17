@@ -6,14 +6,23 @@
 //
 
 import SwiftUI
+import MapKit
 
 struct InvestmentSearchView: View {
     @Bindable var homeViewModel: HomeViewModel
     @State private var viewModel = InvestmentSearchViewModel()
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    
+    // Location search
+    @State private var locationQuery: String = ""
+    
+    // Form state
+    @State private var isFiltersExpanded = false
     @FocusState private var dscrFocused: Bool
-    @State private var isFormCollapsed = false
+    
+    // Animation state
+    @State private var resultsAppeared = false
 
     private var backgroundColor: Color {
         colorScheme == .dark ? Color.black : Color.white
@@ -21,6 +30,10 @@ struct InvestmentSearchView: View {
 
     private var cardBackground: Color {
         colorScheme == .dark ? Color(white: 0.1) : Color(white: 0.97)
+    }
+    
+    private var hasValidLocation: Bool {
+        !viewModel.criteria.location.trimmed.isEmpty
     }
 
     private var capRateBinding: Binding<Double> {
@@ -63,29 +76,15 @@ struct InvestmentSearchView: View {
                 backgroundColor
                     .ignoresSafeArea()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 20) {
-                        if !homeViewModel.marketRateItems.isEmpty {
-                            ratesAutoScrollView
-                                .frame(height: 50)
-                        }
-
-                        searchSection
-
-                        if viewModel.isLoading {
-                            loadingSection
-                        }
-
-                        if !viewModel.results.isEmpty {
-                            resultsSection
-                        }
-
-                        if !viewModel.history.isEmpty {
-                            historySection
-                        }
+                Group {
+                    switch viewModel.searchPhase {
+                    case .idle:
+                        idleContent
+                    case .analyzing:
+                        analyzingContent
+                    case .complete:
+                        resultsContent
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -97,6 +96,21 @@ struct InvestmentSearchView: View {
                         .fixedSize(horizontal: true, vertical: true)
                 }
                 .sharedBackgroundVisibility(.hidden)
+                
+                if viewModel.searchPhase == .complete {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                viewModel.resetSearch()
+                                resultsAppeared = false
+                            }
+                        } label: {
+                            Text("New Search")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                    }
+                }
             }
             .alert("Search Error", isPresented: Binding(get: {
                 viewModel.errorMessage != nil
@@ -111,25 +125,111 @@ struct InvestmentSearchView: View {
             }
         }
     }
+    
+    // MARK: - Idle State (Search Form)
+    
+    private var idleContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                if !homeViewModel.marketRateItems.isEmpty {
+                    ratesAutoScrollView
+                        .frame(height: 50)
+                }
 
-    private var searchSection: some View {
-        Group {
-            if isFormCollapsed {
-                collapsedFormSummary
-            } else {
-                formSection
+                searchFormSection
+                
+                if !viewModel.history.isEmpty {
+                    historySection
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
         }
     }
-
-    private var formSection: some View {
+    
+    // MARK: - Search Form Section
+    
+    private var searchFormSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Search Filters")
+            // Location field using AddressSearchField pattern
+            LocationSearchField(
+                title: "Location",
+                selectedLocation: $viewModel.criteria.location
+            )
+            
+            // Edit/Hide filters toggle
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isFiltersExpanded.toggle()
+                }
+                HapticManager.shared.selection()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(isFiltersExpanded ? "Hide filters" : "Edit filters")
+                        .font(.subheadline)
+                    
+                    if !isFiltersExpanded {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(viewModel.criteria.filterSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            
+            // Expanded filters
+            if isFiltersExpanded {
+                expandedFiltersContent
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            
+            // Search button
+            Button {
+                dscrFocused = false
+                Task {
+                    await viewModel.search()
+                    if viewModel.errorMessage == nil {
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            resultsAppeared = true
+                        }
+                    }
+                }
+            } label: {
+                Text("Find Investments")
                     .font(.headline)
-
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(hasValidLocation ? Color.primary : Color.clear)
+                    .foregroundStyle(hasValidLocation ? (colorScheme == .dark ? .black : .white) : .primary)
+                    .clipShape(Capsule())
+                    .overlay {
+                        if !hasValidLocation {
+                            Capsule()
+                                .stroke(Color.primary.opacity(0.3), lineWidth: 1.5)
+                        }
+                    }
+            }
+            .disabled(!hasValidLocation)
+        }
+    }
+    
+    private var expandedFiltersContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Divider()
+                .padding(.vertical, 4)
+            
+            HStack {
+                Text("Search Criteria")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
                 Spacer()
-
+                
                 Button("Reset") {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         viewModel.resetCriteria()
@@ -139,14 +239,7 @@ struct InvestmentSearchView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-
-            TextInputField(
-                title: "City, State, or ZIP",
-                text: $viewModel.criteria.location,
-                placeholder: "Austin, TX or 78701",
-                icon: "mappin.and.ellipse"
-            )
-
+            
             HStack(spacing: 12) {
                 CurrencyField(title: "Min Budget", value: $viewModel.criteria.minPrice)
                 CurrencyField(title: "Max Budget", value: $viewModel.criteria.maxPrice)
@@ -183,54 +276,149 @@ struct InvestmentSearchView: View {
                         .inputFieldStyle(isFocused: dscrFocused)
                 }
             }
-
-            Button {
-                Task {
-                    await viewModel.search()
-                    if viewModel.errorMessage == nil {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isFormCollapsed = true
-                        }
-                    }
-                }
-            } label: {
-                Text("Find Investments")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.primary)
-                    .foregroundStyle(colorScheme == .dark ? .black : .white)
-                    .clipShape(Capsule())
-            }
         }
     }
+    
+    // MARK: - Analyzing State
+    
+    private var analyzingContent: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            LoadingThreeBallsTriangle(
+                color: colorScheme == .dark ? .white : .black,
+                size: 60,
+                speed: 0.5
+            )
+            
+            VStack(spacing: 8) {
+                Text("Analyzing the market")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                
+                Text("Searching for investments in \(viewModel.criteria.location)...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            Spacer()
+            
+            // Show filters summary during loading
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Looking for:")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                
+                Text(viewModel.criteria.filterSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Text(viewModel.criteria.returnTargetsSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+    }
+    
+    // MARK: - Results State
+    
+    private var resultsContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                if !homeViewModel.marketRateItems.isEmpty {
+                    ratesAutoScrollView
+                        .frame(height: 50)
+                }
 
-    private var loadingSection: some View {
+                searchSummaryCard
+
+                if viewModel.results.isEmpty {
+                    noResultsView
+                } else {
+                    resultsSection
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
+        }
+    }
+    
+    private var searchSummaryCard: some View {
         HStack(spacing: 12) {
-            ProgressView()
-            Text("Scoring the best listings...")
+            Image(systemName: "mappin.circle.fill")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.criteria.location)
+                    .font(.headline)
+                
+                Text(viewModel.criteria.filterSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(viewModel.results.count)")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Text("matches")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .opacity(resultsAppeared ? 1 : 0)
+        .offset(y: resultsAppeared ? 0 : 20)
+    }
+    
+    private var noResultsView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            
+            Text("No matching investments found")
+                .font(.headline)
+            
+            Text("Try adjusting your filters or searching a different location.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+        .opacity(resultsAppeared ? 1 : 0)
     }
 
     private var resultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Top Matches")
-                    .font(.headline)
-
-                Spacer()
-
-                Text("\(viewModel.results.count) results")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text("Top Matches")
+                .font(.headline)
+                .opacity(resultsAppeared ? 1 : 0)
 
             LazyVStack(spacing: 16) {
-                ForEach(viewModel.results) { result in
+                ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, result in
                     investmentResultPropertyCard(for: result)
+                        .opacity(resultsAppeared ? 1 : 0)
+                        .offset(y: resultsAppeared ? 0 : 30)
+                        .animation(
+                            .spring(response: 0.5, dampingFraction: 0.8)
+                            .delay(Double(index) * 0.05),
+                            value: resultsAppeared
+                        )
                 }
             }
         }
@@ -238,45 +426,65 @@ struct InvestmentSearchView: View {
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Previous Searches")
+            Text("Recent Searches")
                 .font(.headline)
+                .foregroundStyle(.secondary)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 ForEach(viewModel.history) { item in
                     Button {
                         viewModel.applyHistory(item)
                         Task {
                             await viewModel.search()
                             if viewModel.errorMessage == nil {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    isFormCollapsed = true
+                                try? await Task.sleep(nanoseconds: 100_000_000)
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                    resultsAppeared = true
                                 }
                             }
                         }
                     } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
                                 Text(item.criteria.location)
                                     .font(.subheadline)
-                                    .fontWeight(.semibold)
+                                    .fontWeight(.medium)
                                     .foregroundStyle(.primary)
 
-                                Text("Avg score \(Int(item.averageScore)) • \(item.resultCount) listings")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    Text("\(item.resultCount) results")
+                                    Text("·")
+                                    Text("Avg \(Int(item.averageScore))")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             }
 
                             Spacer()
 
-                            Text(item.searchedAt, style: .date)
+                            Text(item.searchedAt.relativeFormat)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.tertiary)
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.tertiary)
                         }
                         .padding(14)
                         .background(cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            withAnimation {
+                                viewModel.deleteHistoryItem(item)
+                            }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
@@ -305,37 +513,6 @@ struct InvestmentSearchView: View {
                 RateItemView(item: item, showChart: true)
             }
         }
-    }
-
-    private var collapsedFormSummary: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Search Filters")
-                    .font(.headline)
-
-                Spacer()
-
-                Button("Edit") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isFormCollapsed = false
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Text(filterSummaryText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.top, 4)
-    }
-
-    private var filterSummaryText: String {
-        let locationText = viewModel.criteria.location.isEmpty ? "Any location" : viewModel.criteria.location
-        let minPrice = viewModel.criteria.minPrice > 0 ? viewModel.criteria.minPrice.asCompactCurrency : "No min"
-        let maxPrice = viewModel.criteria.maxPrice > 0 ? viewModel.criteria.maxPrice.asCompactCurrency : "No max"
-        return "\(locationText) • \(minPrice) - \(maxPrice)"
     }
 
     private func investmentResultPropertyCard(for result: InvestmentSearchResult) -> some View {
@@ -372,5 +549,206 @@ struct InvestmentSearchView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Location Search Field
+
+/// Location search field with MapKit autocomplete for city/state/ZIP searches
+struct LocationSearchField: View {
+    let title: String
+    @Binding var selectedLocation: String
+    
+    @State private var searchCompleter = LocationSearchCompleter()
+    @State private var showSuggestions: Bool = false
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                HStack {
+                    Image(systemName: "mappin.and.ellipse")
+                        .foregroundStyle(.tertiary)
+                    
+                    TextField("City, State, or ZIP", text: $searchCompleter.searchQuery)
+                        .autocorrectionDisabled()
+                        .focused($isFocused)
+                        .onChange(of: searchCompleter.searchQuery) { _, newValue in
+                            showSuggestions = !newValue.isEmpty && isFocused
+                            selectedLocation = newValue
+                        }
+                        .onChange(of: isFocused) { _, focused in
+                            if focused {
+                                showSuggestions = !searchCompleter.searchQuery.isEmpty
+                                Task { @MainActor in
+                                    HapticManager.shared.editField()
+                                }
+                            } else {
+                                // Delay hiding so tap on suggestion can register
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    showSuggestions = false
+                                }
+                            }
+                        }
+                    
+                    if !searchCompleter.searchQuery.isEmpty {
+                        Button {
+                            searchCompleter.clearSearch()
+                            selectedLocation = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    if !selectedLocation.isEmpty && !isFocused {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(isFocused ? Color.accentColor : Color(.separator), lineWidth: isFocused ? 1.5 : 0.5)
+                }
+            }
+            
+            // Suggestions dropdown
+            if showSuggestions && !searchCompleter.suggestions.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(searchCompleter.suggestions.prefix(5)) { suggestion in
+                        Button {
+                            selectSuggestion(suggestion)
+                        } label: {
+                            HStack {
+                                Text(suggestion.fullLocation)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        if suggestion.id != searchCompleter.suggestions.prefix(5).last?.id {
+                            Divider()
+                                .padding(.leading, 12)
+                        }
+                    }
+                }
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showSuggestions)
+        .animation(.easeInOut(duration: 0.2), value: searchCompleter.suggestions.count)
+        .onAppear {
+            // Sync initial value
+            if !selectedLocation.isEmpty {
+                searchCompleter.searchQuery = selectedLocation
+            }
+        }
+    }
+    
+    private func selectSuggestion(_ suggestion: LocationSuggestion) {
+        searchCompleter.searchQuery = suggestion.fullLocation
+        selectedLocation = suggestion.fullLocation
+        showSuggestions = false
+        isFocused = false
+        HapticManager.shared.selection()
+    }
+}
+
+// MARK: - Location Search Completer
+
+/// Location suggestion model for city/state/ZIP searches
+struct LocationSuggestion: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let completion: MKLocalSearchCompletion
+    
+    var fullLocation: String {
+        if subtitle.isEmpty {
+            return title
+        }
+        return "\(title), \(subtitle)"
+    }
+    
+    static func == (lhs: LocationSuggestion, rhs: LocationSuggestion) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+/// Observable class that handles location autocomplete for investment search
+@MainActor
+@Observable
+final class LocationSearchCompleter: NSObject {
+    var suggestions: [LocationSuggestion] = []
+    var isSearching: Bool = false
+    var searchQuery: String = "" {
+        didSet {
+            searchCompleter.queryFragment = searchQuery
+        }
+    }
+    
+    private let searchCompleter = MKLocalSearchCompleter()
+    
+    override init() {
+        super.init()
+        searchCompleter.delegate = self
+        searchCompleter.resultTypes = [.address, .query]
+        searchCompleter.pointOfInterestFilter = .excludingAll
+    }
+    
+    func clearSearch() {
+        suggestions = []
+        searchQuery = ""
+    }
+}
+
+extension LocationSearchCompleter: MKLocalSearchCompleterDelegate {
+    nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        Task { @MainActor in
+            // Filter to prefer city/region results over specific street addresses
+            self.suggestions = completer.results
+                .filter { result in
+                    // Prefer results that look like cities/regions (no street numbers at start)
+                    let hasStreetNumber = result.title.first?.isNumber ?? false
+                    return !hasStreetNumber
+                }
+                .map { result in
+                    LocationSuggestion(
+                        title: result.title,
+                        subtitle: result.subtitle,
+                        completion: result
+                    )
+                }
+            self.isSearching = false
+        }
+    }
+    
+    nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        Task { @MainActor in
+            self.isSearching = false
+        }
     }
 }

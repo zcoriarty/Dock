@@ -71,24 +71,17 @@ struct PropertyCard: View {
                     
                     Spacer()
                     
-                    if let accessory = topTrailingAccessory {
-                        VStack(alignment: .trailing, spacing: 6) {
-                            accessory
-                            HStack(spacing: 6) {
-                                scoreBadge
-                                if property.isPinned {
-                                    Image(systemName: "pin.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.orange)
-                                }
-                            }
-                        }
-                    } else {
+                    HStack(spacing: 8) {
                         scoreBadge
+                        
                         if property.isPinned {
                             Image(systemName: "pin.fill")
                                 .font(.caption)
                                 .foregroundStyle(.orange)
+                        }
+                        
+                        if let accessory = topTrailingAccessory {
+                            accessory
                         }
                     }
                 }

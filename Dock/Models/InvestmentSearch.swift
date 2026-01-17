@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct InvestmentSearchCriteria: Hashable, Sendable {
+struct InvestmentSearchCriteria: Hashable, Sendable, Codable {
     var location: String
     var minPrice: Double
     var maxPrice: Double
@@ -39,6 +39,39 @@ struct InvestmentSearchCriteria: Hashable, Sendable {
     var limit: Int
     var pastDays: Int
     var listingType: ListingType
+    
+    /// Compact summary of key filters (excluding location)
+    var filterSummary: String {
+        var parts: [String] = []
+        
+        if minPrice > 0 || maxPrice > 0 {
+            let minStr = minPrice > 0 ? minPrice.asCompactCurrency : "Any"
+            let maxStr = maxPrice > 0 ? maxPrice.asCompactCurrency : "Any"
+            parts.append("\(minStr)–\(maxStr)")
+        }
+        
+        if minBeds > 0 {
+            parts.append("\(minBeds)+ bd")
+        }
+        
+        if minBaths > 0 {
+            parts.append("\(minBaths)+ ba")
+        }
+        
+        if minSqft > 0 {
+            parts.append("\(minSqft.withCommas)+ sqft")
+        }
+        
+        return parts.isEmpty ? "Default filters" : parts.joined(separator: " • ")
+    }
+    
+    /// Returns summary of target return metrics
+    var returnTargetsSummary: String {
+        let cap = (targetCapRate * 100).formatted(.number.precision(.fractionLength(1)))
+        let coc = (targetCashOnCash * 100).formatted(.number.precision(.fractionLength(1)))
+        let dscr = targetDSCR.formatted(.number.precision(.fractionLength(2)))
+        return "\(cap)% Cap • \(coc)% CoC • \(dscr) DSCR"
+    }
 
     static var `default`: InvestmentSearchCriteria {
         InvestmentSearchCriteria(
@@ -96,10 +129,18 @@ struct InvestmentSearchResult: Identifiable, Sendable {
     let metrics: InvestmentSearchMetrics
 }
 
-struct InvestmentSearchHistoryItem: Identifiable, Sendable {
-    let id = UUID()
+struct InvestmentSearchHistoryItem: Identifiable, Sendable, Codable {
+    let id: UUID
     let criteria: InvestmentSearchCriteria
     let resultCount: Int
     let averageScore: Double
     let searchedAt: Date
+    
+    init(id: UUID = UUID(), criteria: InvestmentSearchCriteria, resultCount: Int, averageScore: Double, searchedAt: Date) {
+        self.id = id
+        self.criteria = criteria
+        self.resultCount = resultCount
+        self.averageScore = averageScore
+        self.searchedAt = searchedAt
+    }
 }
