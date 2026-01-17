@@ -19,7 +19,7 @@ struct DockApp: App {
     
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            RootTabView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .preferredColorScheme(.none) // Respect system setting
         }

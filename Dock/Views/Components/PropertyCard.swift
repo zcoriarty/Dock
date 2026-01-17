@@ -13,6 +13,8 @@ struct PropertyCard: View {
     let colorScheme: ColorScheme
     let onPin: () -> Void
     let onDelete: () -> Void
+    var showsContextMenu: Bool = true
+    var topTrailingAccessory: AnyView? = nil
     
     private var score: Double {
         property.metrics.overallScore
@@ -23,24 +25,32 @@ struct PropertyCard: View {
     }
     
     var body: some View {
-        cardLayout
-            .background(cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .contextMenu {
-                Button {
-                    onPin()
-                } label: {
-                    Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
-                }
-                
-                Divider()
-                
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
+        Group {
+            if showsContextMenu {
+                cardLayout
+                    .background(cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .contextMenu {
+                        Button {
+                            onPin()
+                        } label: {
+                            Label(property.isPinned ? "Unpin" : "Pin", systemImage: property.isPinned ? "pin.slash" : "pin")
+                        }
+                        
+                        Divider()
+                        
+                        Button(role: .destructive) {
+                            onDelete()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+            } else {
+                cardLayout
+                    .background(cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             }
+        }
     }
     
     // MARK: - Card Layout
@@ -61,12 +71,25 @@ struct PropertyCard: View {
                     
                     Spacer()
                     
-                    scoreBadge
-                    
-                    if property.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                    if let accessory = topTrailingAccessory {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            accessory
+                            HStack(spacing: 6) {
+                                scoreBadge
+                                if property.isPinned {
+                                    Image(systemName: "pin.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
+                            }
+                        }
+                    } else {
+                        scoreBadge
+                        if property.isPinned {
+                            Image(systemName: "pin.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
                 }
                 

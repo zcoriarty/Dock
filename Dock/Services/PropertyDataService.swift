@@ -145,6 +145,44 @@ actor PropertyDataService {
         
         return response.properties.map { mapDockResponse($0) }
     }
+
+    // MARK: - Investment Search
+
+    func searchInvestmentProperties(criteria: InvestmentSearchCriteria) async throws -> [InvestmentSearchResult] {
+        guard let baseURL = APIConfiguration.DockAPI.baseURL,
+              !baseURL.isEmpty else {
+            return []
+        }
+
+        guard let url = URL(string: "\(baseURL)/investment-search") else {
+            throw NetworkError.invalidURL
+        }
+
+        let requestPayload = DockInvestmentSearchRequest(criteria: criteria)
+        let response: DockInvestmentSearchResponse = try await NetworkManager.shared.post(
+            url: url,
+            body: requestPayload
+        )
+
+        return response.results.map { result in
+            InvestmentSearchResult(
+                id: result.id,
+                property: mapDockResponse(result.property),
+                metrics: InvestmentSearchMetrics(
+                    estimatedRent: result.metrics.estimatedRent,
+                    effectiveGrossIncome: result.metrics.effectiveGrossIncome,
+                    netOperatingIncome: result.metrics.netOperatingIncome,
+                    capRate: result.metrics.capRate,
+                    cashOnCash: result.metrics.cashOnCash,
+                    dscr: result.metrics.dscr,
+                    annualCashFlow: result.metrics.annualCashFlow,
+                    annualDebtService: result.metrics.annualDebtService,
+                    totalCashRequired: result.metrics.totalCashRequired,
+                    score: result.metrics.score
+                )
+            )
+        }
+    }
     
     // MARK: - Mapping
     
@@ -454,6 +492,135 @@ struct DockPropertyResponse: Codable, Sendable {
 struct DockSearchResponse: Codable, Sendable {
     let count: Int
     let properties: [DockPropertyResponse]
+}
+
+// MARK: - Investment Search API Models
+
+struct DockInvestmentSearchRequest: Encodable {
+    let location: String
+    let listingType: String
+    let minPrice: Int?
+    let maxPrice: Int?
+    let minBeds: Int?
+    let maxBeds: Int?
+    let minBaths: Int?
+    let minSqft: Int?
+    let maxSqft: Int?
+    let minLotSqft: Int?
+    let maxLotSqft: Int?
+    let minYearBuilt: Int?
+    let maxYearBuilt: Int?
+    let maxDaysOnMarket: Int?
+    let minCapRate: Double?
+    let minCashOnCash: Double?
+    let minDscr: Double?
+    let targetCapRate: Double
+    let targetCashOnCash: Double
+    let targetDscr: Double
+    let interestRate: Double
+    let downPaymentPercent: Double
+    let closingCostPercent: Double
+    let vacancyRate: Double
+    let managementFeePercent: Double
+    let repairsPerYear: Double
+    let insuranceRate: Double
+    let otherExpensesAnnual: Double
+    let rentSensitivity: Double
+    let limit: Int
+    let pastDays: Int?
+
+    init(criteria: InvestmentSearchCriteria) {
+        location = criteria.location
+        listingType = criteria.listingType.rawValue
+        minPrice = criteria.minPrice > 0 ? Int(criteria.minPrice) : nil
+        maxPrice = criteria.maxPrice > 0 ? Int(criteria.maxPrice) : nil
+        minBeds = criteria.minBeds > 0 ? criteria.minBeds : nil
+        maxBeds = criteria.maxBeds > 0 ? criteria.maxBeds : nil
+        minBaths = criteria.minBaths > 0 ? criteria.minBaths : nil
+        minSqft = criteria.minSqft > 0 ? criteria.minSqft : nil
+        maxSqft = criteria.maxSqft > 0 ? criteria.maxSqft : nil
+        minLotSqft = criteria.minLotSqft > 0 ? criteria.minLotSqft : nil
+        maxLotSqft = criteria.maxLotSqft > 0 ? criteria.maxLotSqft : nil
+        minYearBuilt = criteria.minYearBuilt > 0 ? criteria.minYearBuilt : nil
+        maxYearBuilt = criteria.maxYearBuilt > 0 ? criteria.maxYearBuilt : nil
+        maxDaysOnMarket = criteria.maxDaysOnMarket > 0 ? criteria.maxDaysOnMarket : nil
+        minCapRate = criteria.minCapRate > 0 ? criteria.minCapRate : nil
+        minCashOnCash = criteria.minCashOnCash > 0 ? criteria.minCashOnCash : nil
+        minDscr = criteria.minDSCR > 0 ? criteria.minDSCR : nil
+        targetCapRate = criteria.targetCapRate
+        targetCashOnCash = criteria.targetCashOnCash
+        targetDscr = criteria.targetDSCR
+        interestRate = criteria.interestRate
+        downPaymentPercent = criteria.downPaymentPercent
+        closingCostPercent = criteria.closingCostPercent
+        vacancyRate = criteria.vacancyRate
+        managementFeePercent = criteria.managementFeePercent
+        repairsPerYear = criteria.repairsPerYear
+        insuranceRate = criteria.insuranceRate
+        otherExpensesAnnual = criteria.otherExpensesAnnual
+        rentSensitivity = criteria.rentSensitivity
+        limit = criteria.limit
+        pastDays = criteria.pastDays > 0 ? criteria.pastDays : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case location
+        case listingType = "listing_type"
+        case minPrice = "min_price"
+        case maxPrice = "max_price"
+        case minBeds = "min_beds"
+        case maxBeds = "max_beds"
+        case minBaths = "min_baths"
+        case minSqft = "min_sqft"
+        case maxSqft = "max_sqft"
+        case minLotSqft = "min_lot_sqft"
+        case maxLotSqft = "max_lot_sqft"
+        case minYearBuilt = "min_year_built"
+        case maxYearBuilt = "max_year_built"
+        case maxDaysOnMarket = "max_days_on_market"
+        case minCapRate = "min_cap_rate"
+        case minCashOnCash = "min_cash_on_cash"
+        case minDscr = "min_dscr"
+        case targetCapRate = "target_cap_rate"
+        case targetCashOnCash = "target_cash_on_cash"
+        case targetDscr = "target_dscr"
+        case interestRate = "interest_rate"
+        case downPaymentPercent = "down_payment_percent"
+        case closingCostPercent = "closing_cost_percent"
+        case vacancyRate = "vacancy_rate"
+        case managementFeePercent = "management_fee_percent"
+        case repairsPerYear = "repairs_per_year"
+        case insuranceRate = "insurance_rate"
+        case otherExpensesAnnual = "other_expenses_annual"
+        case rentSensitivity = "rent_sensitivity"
+        case limit
+        case pastDays = "past_days"
+    }
+}
+
+struct DockInvestmentSearchResponse: Codable, Sendable {
+    let count: Int
+    let results: [DockInvestmentResultResponse]
+    let sortedBy: String?
+}
+
+struct DockInvestmentResultResponse: Codable, Sendable {
+    let id: String
+    let property: DockPropertyResponse
+    let metrics: DockInvestmentMetricsResponse
+}
+
+struct DockInvestmentMetricsResponse: Codable, Sendable {
+    let estimatedRent: Double?
+    let effectiveGrossIncome: Double?
+    let netOperatingIncome: Double?
+    let capRate: Double?
+    let cashOnCash: Double?
+    let dscr: Double?
+    let annualCashFlow: Double?
+    let annualDebtService: Double?
+    let totalCashRequired: Double?
+    let score: Double
 }
 
 // MARK: - Errors

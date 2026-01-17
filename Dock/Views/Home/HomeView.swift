@@ -9,11 +9,14 @@ import SwiftUI
 import Charts
 
 struct HomeView: View {
-    @State private var viewModel = HomeViewModel()
+    @Bindable var viewModel: HomeViewModel
+
+    init(viewModel: HomeViewModel) {
+        self.viewModel = viewModel
+    }
     @State private var showingAddProperty = false
     @State private var selectedProperty: Property?
     @State private var showingFilters = false
-    @State private var showingSearch = false
     @State private var dropTargetedFolderID: UUID?
     @Environment(\.colorScheme) private var colorScheme
     @Namespace private var namespace
@@ -86,13 +89,6 @@ struct HomeView: View {
                 
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
-                        Button {
-                            showingSearch = true
-                            HapticManager.shared.impact(.light)
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        
                         Menu {
                             ForEach(HomeViewModel.SortOption.allCases) { option in
                                 Button {
@@ -196,7 +192,6 @@ struct HomeView: View {
                 viewModel.sortAscending = storedSortAscending
             }
         }
-        .searchable(text: $viewModel.searchText, isPresented: $showingSearch, prompt: "Search properties")
     }
     
     // MARK: - Rates Auto Scroll View
@@ -695,5 +690,5 @@ struct FolderChip: View {
 // MARK: - Preview
 
 #Preview {
-    HomeView()
+    HomeView(viewModel: HomeViewModel())
 }
