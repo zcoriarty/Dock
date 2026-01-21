@@ -405,6 +405,125 @@ struct SliderField: View {
     }
 }
 
+// MARK: - Management Fee Field (Bidirectional Sync)
+
+struct ManagementFeeField: View {
+    let title: String
+    @Binding var percentValue: Double // Stored as decimal (0.08 = 8%)
+    let effectiveGrossIncome: Double // Annual EGI for calculating absolute value
+    var isEdited: Bool = false
+    
+    @FocusState private var isFocused: Bool
+    @State private var absoluteTextValue: String = ""
+    
+    private var absoluteValue: Double {
+        effectiveGrossIncome * percentValue
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Title with optional pencil icon
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                if isEdited {
+                    Image(systemName: "pencil")
+                        .font(.caption)
+                        .foregroundStyle(Color(white: 0.5))
+                }
+            }
+            
+            // Combined bordered section for slider and currency
+            VStack(spacing: 12) {
+                // Slider for percent
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Percent")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        
+                        Spacer()
+                        
+                        Text((percentValue * 100).asDecimal + "%")
+                            .font(.system(.body, design: .rounded, weight: .medium))
+                    }
+                    
+                    Slider(value: $percentValue, in: 0...0.15, step: 0.005) { editing in
+                        if editing {
+                            Task { @MainActor in
+                                HapticManager.shared.slider()
+                            }
+                        }
+                    }
+                    .tint(.accentColor)
+                    .onChange(of: percentValue) { _, newPercent in
+                        guard !isFocused else { return }
+                        let newAbsolute = effectiveGrossIncome * newPercent
+                        absoluteTextValue = newAbsolute > 0 ? String(Int(newAbsolute.rounded())) : ""
+                    }
+                }
+                
+                Divider()
+                
+                // Currency field for absolute value
+                HStack {
+                    Text("Annual Amount")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 4) {
+                        Text("$")
+                            .foregroundStyle(.tertiary)
+                        
+                        TextField("0", text: $absoluteTextValue)
+                            .keyboardType(.numberPad)
+                            .focused($isFocused)
+                            .multilineTextAlignment(.trailing)
+                            .frame(minWidth: 60)
+                            .onChange(of: absoluteTextValue) { _, newValue in
+                                let filtered = newValue.filter { $0.isNumber }
+                                absoluteTextValue = filtered
+                                if let absoluteDouble = Double(filtered), effectiveGrossIncome > 0 {
+                                    percentValue = absoluteDouble / effectiveGrossIncome
+                                    // Clamp to valid range
+                                    percentValue = min(max(percentValue, 0), 0.15)
+                                }
+                            }
+                            .onChange(of: isFocused) { _, focused in
+                                if focused {
+                                    Task { @MainActor in
+                                        HapticManager.shared.editField()
+                                    }
+                                }
+                            }
+                    }
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isFocused ? Color.accentColor : Color(.separator), lineWidth: isFocused ? 1.5 : 0.5)
+            }
+        }
+        .onAppear {
+            absoluteTextValue = absoluteValue > 0 ? String(Int(absoluteValue.rounded())) : ""
+        }
+        .onChange(of: effectiveGrossIncome) { _, _ in
+            guard !isFocused else { return }
+            let newAbsolute = effectiveGrossIncome * percentValue
+            absoluteTextValue = newAbsolute > 0 ? String(Int(newAbsolute.rounded())) : ""
+        }
+    }
+}
+
 // MARK: - Previews
 
 #Preview("Input Fields") {

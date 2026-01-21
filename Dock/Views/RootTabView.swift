@@ -11,6 +11,23 @@ import SwiftUI
 struct RootTabView: View {
     @State private var homeViewModel = HomeViewModel()
     @State private var searchText = ""
+    
+    init() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithDefaultBackground()
+        
+        // Configure unselected icon color to modern gray
+        let unselectedColor = UIColor(white: 0.5, alpha: 1.0)
+        appearance.stackedLayoutAppearance.normal.iconColor = unselectedColor
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: unselectedColor]
+        appearance.inlineLayoutAppearance.normal.iconColor = unselectedColor
+        appearance.inlineLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: unselectedColor]
+        appearance.compactInlineLayoutAppearance.normal.iconColor = unselectedColor
+        appearance.compactInlineLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: unselectedColor]
+        
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
 
     var body: some View {
         TabView {
@@ -18,7 +35,7 @@ struct RootTabView: View {
                 HomeView(viewModel: homeViewModel)
             }
 
-            Tab("Invest", systemImage: "sparkles") {
+            Tab("Scan", systemImage: "rectangle.and.text.magnifyingglass") {
                 InvestmentSearchView(homeViewModel: homeViewModel)
             }
             
@@ -30,6 +47,7 @@ struct RootTabView: View {
                 .searchable(text: $searchText, prompt: "Search properties")
             }
         }
+        .tint(.primary)
     }
 }
 

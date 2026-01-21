@@ -38,6 +38,11 @@ extension Double {
         String(format: "%.\(decimals)f%%", self * 100)
     }
     
+    /// Format as percentage string with 1 decimal (e.g., 0.065 = "6.5%")
+    var asPercentString: String {
+        String(format: "%.1f%%", self * 100)
+    }
+    
     /// Format with comma separators
     var withCommas: String {
         let formatter = NumberFormatter()
@@ -215,6 +220,14 @@ extension Array {
     /// Safe subscript that returns nil for out of bounds
     subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+extension Array where Element == Double {
+    /// Calculate average of all elements
+    var average: Double {
+        guard !isEmpty else { return 0 }
+        return reduce(0, +) / Double(count)
     }
 }
 

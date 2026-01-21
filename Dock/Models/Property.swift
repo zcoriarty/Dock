@@ -76,6 +76,9 @@ struct Property: Identifiable, Hashable, Sendable {
     var photoURLs: [String]
     var primaryPhotoData: Data?
     
+    // Edit Tracking
+    var editedFields: EditedFields
+    
     init(
         id: UUID = UUID(),
         createdAt: Date = Date(),
@@ -111,7 +114,8 @@ struct Property: Identifiable, Hashable, Sendable {
         checklist: PropertyChecklist = PropertyChecklist.defaultChecklist,
         folderID: UUID? = nil,
         photoURLs: [String] = [],
-        primaryPhotoData: Data? = nil
+        primaryPhotoData: Data? = nil,
+        editedFields: EditedFields = EditedFields()
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -148,6 +152,7 @@ struct Property: Identifiable, Hashable, Sendable {
         self.photoURLs = photoURLs
         self.primaryPhotoData = primaryPhotoData
         self.checklist = checklist
+        self.editedFields = editedFields
     }
     
     var fullAddress: String {
@@ -315,5 +320,37 @@ struct PropertyFolder: Identifiable, Hashable, Sendable {
     
     var color: Color {
         Color(hex: colorHex) ?? .blue
+    }
+}
+
+// MARK: - Edited Fields Tracking
+
+struct EditedFields: Hashable, Codable, Sendable {
+    var estimatedRentPerUnit: Bool = false
+    var vacancyRate: Bool = false
+    var managementFeePercent: Bool = false
+    var annualTaxes: Bool = false
+    var insuranceAnnual: Bool = false
+    var repairsPerUnit: Bool = false
+    var purchasePrice: Bool = false
+    var ltv: Bool = false
+    var interestRate: Bool = false
+    
+    mutating func reset() {
+        estimatedRentPerUnit = false
+        vacancyRate = false
+        managementFeePercent = false
+        annualTaxes = false
+        insuranceAnnual = false
+        repairsPerUnit = false
+        purchasePrice = false
+        ltv = false
+        interestRate = false
+    }
+    
+    var hasAnyEdits: Bool {
+        estimatedRentPerUnit || vacancyRate || managementFeePercent ||
+        annualTaxes || insuranceAnnual || repairsPerUnit ||
+        purchasePrice || ltv || interestRate
     }
 }

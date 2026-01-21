@@ -337,8 +337,6 @@ struct InvestmentSearchView: View {
                         .frame(height: 50)
                 }
 
-                searchSummaryCard
-
                 if viewModel.results.isEmpty {
                     noResultsView
                 } else {
@@ -349,40 +347,7 @@ struct InvestmentSearchView: View {
             .padding(.bottom, 24)
         }
     }
-    
-    private var searchSummaryCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "mappin.circle.fill")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.criteria.location)
-                    .font(.headline)
-                
-                Text(viewModel.criteria.filterSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(viewModel.results.count)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Text("matches")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(16)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .opacity(resultsAppeared ? 1 : 0)
-        .offset(y: resultsAppeared ? 0 : 20)
-    }
+
     
     private var noResultsView: some View {
         VStack(spacing: 16) {
@@ -403,22 +368,104 @@ struct InvestmentSearchView: View {
         .opacity(resultsAppeared ? 1 : 0)
     }
 
-    private var resultsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Top Matches")
-                .font(.headline)
-                .opacity(resultsAppeared ? 1 : 0)
+    private var resultsSummary: some View {
+        let results = viewModel.results
+        let avgCapRate = results.compactMap { $0.metrics.capRate }.average
+        let avgCashOnCash = results.compactMap { $0.metrics.cashOnCash }.average
+        let avgScore = results.map { $0.metrics.score }.average
+        let priceRange = (
+            min: results.map { $0.property.askingPrice }.min() ?? 0,
+            max: results.map { $0.property.askingPrice }.max() ?? 0
+        )
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            // Header with location and count
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(results.count)")
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("properties found")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("in \(viewModel.criteria.location)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            
+            // Metrics row
+            HStack(spacing: 0) {
+                summaryMetric(
+                    value: avgCapRate.asPercentString,
+                    label: "Avg Cap"
+                )
+                
+                Spacer()
+                
+                summaryMetric(
+                    value: avgCashOnCash.asPercentString,
+                    label: "Avg CoC"
+                )
+                
+                Spacer()
+                
+                summaryMetric(
+                    value: String(format: "%.0f", avgScore),
+                    label: "Avg Score"
+                )
+                
+                Spacer()
+                
+                summaryMetric(
+                    value: priceRange.min.asCompactCurrency + "–" + priceRange.max.asCompactCurrency,
+                    label: "Price Range"
+                )
+            }
+            
+            Divider()
+                .padding(.top, 4)
+        }
+        .opacity(resultsAppeared ? 1 : 0)
+        .animation(.easeOut(duration: 0.4), value: resultsAppeared)
+    }
+    
+    private func summaryMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
 
-            LazyVStack(spacing: 16) {
-                ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, result in
-                    investmentResultPropertyCard(for: result)
-                        .opacity(resultsAppeared ? 1 : 0)
-                        .offset(y: resultsAppeared ? 0 : 30)
-                        .animation(
-                            .spring(response: 0.5, dampingFraction: 0.8)
-                            .delay(Double(index) * 0.05),
-                            value: resultsAppeared
-                        )
+    private var resultsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            resultsSummary
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Top Matches")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .opacity(resultsAppeared ? 1 : 0)
+
+                LazyVStack(spacing: 16) {
+                    ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, result in
+                        investmentResultPropertyCard(for: result)
+                            .opacity(resultsAppeared ? 1 : 0)
+                            .offset(y: resultsAppeared ? 0 : 30)
+                            .animation(
+                                .spring(response: 0.5, dampingFraction: 0.8)
+                                .delay(Double(index) * 0.05),
+                                value: resultsAppeared
+                            )
+                    }
                 }
             }
         }

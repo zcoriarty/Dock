@@ -1288,7 +1288,7 @@ struct ModernEconomicsRow: View {
             if let detail, isExpanded {
                 CalculationDetailView(detail: detail)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    .padding(.vertical, 12)
             }
         }
     }
@@ -1518,9 +1518,20 @@ struct FinancingSheet: View {
     @Bindable var viewModel: PropertyDetailViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @State private var showingResetConfirmation = false
     
     private var backgroundColor: Color {
         colorScheme == .dark ? Color.black : Color.white
+    }
+    
+    /// Computed EGI for management fee calculation
+    private var effectiveGrossIncome: Double {
+        let monthlyRent = viewModel.property.estimatedTotalRent > 0 
+            ? viewModel.property.estimatedTotalRent 
+            : viewModel.property.estimatedRentPerUnit * Double(viewModel.property.unitCount)
+        let grossPotentialRent = monthlyRent * 12
+        let vacancyLoss = grossPotentialRent * viewModel.property.vacancyRate
+        return grossPotentialRent - vacancyLoss
     }
     
     var body: some View {
@@ -1533,18 +1544,32 @@ struct FinancingSheet: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                         
-                        CurrencyField(title: "Monthly Rent (per unit)", value: $viewModel.property.estimatedRentPerUnit)
-                            .onChange(of: viewModel.property.estimatedRentPerUnit) { _, newValue in
-                                viewModel.property.estimatedTotalRent = newValue * Double(viewModel.property.unitCount)
-                            }
+                        EditableFieldWrapper(
+                            title: "Monthly Rent (per unit)",
+                            isEdited: viewModel.property.editedFields.estimatedRentPerUnit
+                        ) {
+                            CurrencyField(title: "Monthly Rent (per unit)", value: $viewModel.property.estimatedRentPerUnit)
+                                .onChange(of: viewModel.property.estimatedRentPerUnit) { _, newValue in
+                                    viewModel.property.estimatedTotalRent = newValue * Double(viewModel.property.unitCount)
+                                    viewModel.property.editedFields.estimatedRentPerUnit = true
+                                }
+                        }
                         
-                        SliderField(
+                        EditableFieldWrapper(
                             title: "Vacancy Rate",
-                            value: $viewModel.property.vacancyRate,
-                            range: 0...0.20,
-                            step: 0.01,
-                            format: .percent
-                        )
+                            isEdited: viewModel.property.editedFields.vacancyRate
+                        ) {
+                            SliderField(
+                                title: "Vacancy Rate",
+                                value: $viewModel.property.vacancyRate,
+                                range: 0...0.20,
+                                step: 0.01,
+                                format: .percent
+                            )
+                            .onChange(of: viewModel.property.vacancyRate) { _, _ in
+                                viewModel.property.editedFields.vacancyRate = true
+                            }
+                        }
                     }
                     .padding(.horizontal, 20)
                     
@@ -1554,20 +1579,42 @@ struct FinancingSheet: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                         
-                        CurrencyField(title: "Purchase Price", value: $viewModel.property.financing.purchasePrice)
-                        
-                        SliderField(
-                            title: "LTV",
-                            value: $viewModel.property.financing.ltv,
-                            range: 0...0.95,
-                            step: 0.05,
-                            format: .percent
-                        )
-                        .onChange(of: viewModel.property.financing.ltv) { _, _ in
-                            viewModel.property.financing.updateLoanFromLTV()
+                        EditableFieldWrapper(
+                            title: "Purchase Price",
+                            isEdited: viewModel.property.editedFields.purchasePrice
+                        ) {
+                            CurrencyField(title: "Purchase Price", value: $viewModel.property.financing.purchasePrice)
+                                .onChange(of: viewModel.property.financing.purchasePrice) { _, _ in
+                                    viewModel.property.editedFields.purchasePrice = true
+                                }
                         }
                         
-                        PercentField(title: "Interest Rate", value: $viewModel.property.financing.interestRate)
+                        EditableFieldWrapper(
+                            title: "LTV",
+                            isEdited: viewModel.property.editedFields.ltv
+                        ) {
+                            SliderField(
+                                title: "LTV",
+                                value: $viewModel.property.financing.ltv,
+                                range: 0...0.95,
+                                step: 0.05,
+                                format: .percent
+                            )
+                            .onChange(of: viewModel.property.financing.ltv) { _, _ in
+                                viewModel.property.financing.updateLoanFromLTV()
+                                viewModel.property.editedFields.ltv = true
+                            }
+                        }
+                        
+                        EditableFieldWrapper(
+                            title: "Interest Rate",
+                            isEdited: viewModel.property.editedFields.interestRate
+                        ) {
+                            PercentField(title: "Interest Rate", value: $viewModel.property.financing.interestRate)
+                                .onChange(of: viewModel.property.financing.interestRate) { _, _ in
+                                    viewModel.property.editedFields.interestRate = true
+                                }
+                        }
                     }
                     .padding(.horizontal, 20)
                     
@@ -1577,18 +1624,45 @@ struct FinancingSheet: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                         
-                        CurrencyField(title: "Annual Taxes", value: $viewModel.property.annualTaxes)
-                        CurrencyField(title: "Annual Insurance", value: $viewModel.property.insuranceAnnual)
+                        EditableFieldWrapper(
+                            title: "Annual Taxes",
+                            isEdited: viewModel.property.editedFields.annualTaxes
+                        ) {
+                            CurrencyField(title: "Annual Taxes", value: $viewModel.property.annualTaxes)
+                                .onChange(of: viewModel.property.annualTaxes) { _, _ in
+                                    viewModel.property.editedFields.annualTaxes = true
+                                }
+                        }
                         
-                        SliderField(
+                        EditableFieldWrapper(
+                            title: "Annual Insurance",
+                            isEdited: viewModel.property.editedFields.insuranceAnnual
+                        ) {
+                            CurrencyField(title: "Annual Insurance", value: $viewModel.property.insuranceAnnual)
+                                .onChange(of: viewModel.property.insuranceAnnual) { _, _ in
+                                    viewModel.property.editedFields.insuranceAnnual = true
+                                }
+                        }
+                        
+                        ManagementFeeField(
                             title: "Management Fee",
-                            value: $viewModel.property.managementFeePercent,
-                            range: 0...0.15,
-                            step: 0.01,
-                            format: .percent
+                            percentValue: $viewModel.property.managementFeePercent,
+                            effectiveGrossIncome: effectiveGrossIncome,
+                            isEdited: viewModel.property.editedFields.managementFeePercent
                         )
+                        .onChange(of: viewModel.property.managementFeePercent) { _, _ in
+                            viewModel.property.editedFields.managementFeePercent = true
+                        }
                         
-                        CurrencyField(title: "Repairs (per unit/year)", value: $viewModel.property.repairsPerUnit)
+                        EditableFieldWrapper(
+                            title: "Repairs (per unit/year)",
+                            isEdited: viewModel.property.editedFields.repairsPerUnit
+                        ) {
+                            CurrencyField(title: "Repairs (per unit/year)", value: $viewModel.property.repairsPerUnit)
+                                .onChange(of: viewModel.property.repairsPerUnit) { _, _ in
+                                    viewModel.property.editedFields.repairsPerUnit = true
+                                }
+                        }
                     }
                     .padding(.horizontal, 20)
                     
@@ -1620,20 +1694,82 @@ struct FinancingSheet: View {
                         }
                     }
                     .padding(.horizontal, 20)
+                    
+                    // Reset button (only show if there are edits)
+                    if viewModel.property.editedFields.hasAnyEdits {
+                        Button {
+                            showingResetConfirmation = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text("Reset All Changes")
+                            }
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .padding(.horizontal, 20)
+                    }
                 }
                 .padding(.vertical, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
             .background(backgroundColor.ignoresSafeArea())
             .navigationTitle("Edit Assumptions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
+                        Task {
+                            await viewModel.save()
+                        }
                         dismiss()
                     }
                     .fontWeight(.semibold)
                 }
             }
+            .onAppear {
+                viewModel.captureOriginalState()
+            }
+            .confirmationDialog("Reset All Changes?", isPresented: $showingResetConfirmation, titleVisibility: .visible) {
+                Button("Reset to Original Values", role: .destructive) {
+                    Task {
+                        await viewModel.resetEdits()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will restore all values to their original state and remove edit markers.")
+            }
+        }
+    }
+}
+
+// MARK: - Editable Field Wrapper (for pencil indicator)
+
+struct EditableFieldWrapper<Content: View>: View {
+    let title: String
+    let isEdited: Bool
+    @ViewBuilder let content: Content
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if isEdited {
+                HStack(spacing: 4) {
+                    Image(systemName: "pencil")
+                        .font(.caption2)
+                        .foregroundStyle(Color(white: 0.5))
+                    Text("Adjusted")
+                        .font(.caption2)
+                        .foregroundStyle(Color(white: 0.5))
+                }
+                .padding(.bottom, 4)
+            }
+            content
         }
     }
 }

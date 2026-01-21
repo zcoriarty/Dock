@@ -27,6 +27,9 @@ struct AddPropertyView: View {
             ZStack {
                 backgroundColor
                     .ignoresSafeArea()
+                    .onTapGesture {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 
                 VStack(spacing: 0) {
                     // Progress indicator

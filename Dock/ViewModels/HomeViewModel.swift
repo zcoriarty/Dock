@@ -502,7 +502,14 @@ final class HomeViewModel {
             checklist: checklist,
             folderID: entity.folder?.id,
             photoURLs: entity.photoURLs as? [String] ?? [],
-            primaryPhotoData: entity.primaryPhotoData
+            primaryPhotoData: entity.primaryPhotoData,
+            editedFields: {
+                guard let data = entity.editedFieldsData else {
+                    return EditedFields()
+                }
+                return (try? JSONDecoder().decode(EditedFields.self, from: data))
+                    ?? EditedFields()
+            }()
         )
     }
     
@@ -552,6 +559,7 @@ final class HomeViewModel {
         entity.photoURLs = property.photoURLs as NSArray
         entity.primaryPhotoData = property.primaryPhotoData
         entity.checklistData = try? JSONEncoder().encode(property.checklist)
+        entity.editedFieldsData = try? JSONEncoder().encode(property.editedFields)
         
         // Set folder relationship
         if let folderID = property.folderID {

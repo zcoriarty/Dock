@@ -54,6 +54,7 @@
         <attribute name="photoURLs" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromDataTransformerName"/>
         <attribute name="primaryPhotoData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
         <attribute name="checklistData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="editedFieldsData" optional="YES" attributeType="Binary"/>
         <relationship name="folder" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FolderEntity" inverseName="properties" inverseEntity="FolderEntity"/>
         <relationship name="notes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="NoteEntity" inverseName="property" inverseEntity="NoteEntity"/>
         <relationship name="financingScenarios" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="FinancingScenarioEntity" inverseName="property" inverseEntity="FinancingScenarioEntity"/>

@@ -375,4 +375,48 @@ final class PropertyDetailViewModel {
             await self.save(emitHaptics: false)
         }
     }
+    
+    // MARK: - Reset Edits
+    
+    /// Store original property state for reset functionality
+    private var originalProperty: Property?
+    
+    /// Save original values when first entering edit mode
+    func captureOriginalState() {
+        if originalProperty == nil {
+            originalProperty = property
+        }
+    }
+    
+    /// Reset all edits to original values and clear edit markers
+    func resetEdits() async {
+        guard let original = originalProperty else {
+            // If no original, just clear the edit flags
+            property.editedFields.reset()
+            await save()
+            return
+        }
+        
+        // Restore original values
+        property.estimatedRentPerUnit = original.estimatedRentPerUnit
+        property.estimatedTotalRent = original.estimatedTotalRent
+        property.vacancyRate = original.vacancyRate
+        property.managementFeePercent = original.managementFeePercent
+        property.annualTaxes = original.annualTaxes
+        property.insuranceAnnual = original.insuranceAnnual
+        property.repairsPerUnit = original.repairsPerUnit
+        property.financing.purchasePrice = original.financing.purchasePrice
+        property.financing.ltv = original.financing.ltv
+        property.financing.loanAmount = original.financing.loanAmount
+        property.financing.interestRate = original.financing.interestRate
+        
+        // Clear edit markers
+        property.editedFields.reset()
+        
+        // Clear the original snapshot
+        originalProperty = nil
+        
+        await save()
+        HapticManager.shared.success()
+    }
 }
