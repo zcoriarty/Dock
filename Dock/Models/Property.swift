@@ -214,6 +214,28 @@ enum PropertyType: String, CaseIterable, Codable, Sendable {
         case .other: return "questionmark.square.fill"
         }
     }
+    
+    var apiValue: String {
+        switch self {
+        case .singleFamily: return "single_family"
+        case .multiFamily: return "multi_family"
+        case .condo: return "condo"
+        case .townhouse: return "townhouse"
+        case .duplex: return "multi_family" // Map duplex to multi_family for now
+        case .triplex: return "multi_family"
+        case .fourplex: return "multi_family"
+        case .apartment: return "multi_family"
+        case .land: return "land"
+        case .commercial: return "mobile" // Fallback or map appropriately
+        case .mobile: return "mobile"
+        case .other: return "single_family"
+        }
+    }
+    
+    // Compatibility with InvestmentSearch view
+    var displayName: String {
+        rawValue
+    }
 }
 
 // MARK: - Financing Inputs

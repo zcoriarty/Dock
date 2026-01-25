@@ -499,6 +499,7 @@ struct DockSearchResponse: Codable, Sendable {
 struct DockInvestmentSearchRequest: Encodable {
     let location: String
     let listingType: String
+    let propertyType: String?
     let minPrice: Int?
     let maxPrice: Int?
     let minBeds: Int?
@@ -532,6 +533,7 @@ struct DockInvestmentSearchRequest: Encodable {
     init(criteria: InvestmentSearchCriteria) {
         location = criteria.location
         listingType = criteria.listingType.rawValue
+        propertyType = criteria.propertyType?.apiValue
         minPrice = criteria.minPrice > 0 ? Int(criteria.minPrice) : nil
         maxPrice = criteria.maxPrice > 0 ? Int(criteria.maxPrice) : nil
         minBeds = criteria.minBeds > 0 ? criteria.minBeds : nil
@@ -566,6 +568,7 @@ struct DockInvestmentSearchRequest: Encodable {
     enum CodingKeys: String, CodingKey {
         case location
         case listingType = "listing_type"
+        case propertyType = "property_type"
         case minPrice = "min_price"
         case maxPrice = "max_price"
         case minBeds = "min_beds"

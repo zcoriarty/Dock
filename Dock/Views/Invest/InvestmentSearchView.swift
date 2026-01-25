@@ -8,6 +8,8 @@
 import SwiftUI
 import MapKit
 
+import UIKit
+
 struct InvestmentSearchView: View {
     @Bindable var homeViewModel: HomeViewModel
     @State private var viewModel = InvestmentSearchViewModel()
@@ -87,6 +89,9 @@ struct InvestmentSearchView: View {
                     }
                 }
             }
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -155,7 +160,67 @@ struct InvestmentSearchView: View {
             LocationSearchField(
                 title: "Location",
                 selectedLocation: $viewModel.criteria.location
-            )
+            ) {
+                // Search button - slides in from bottom when location has text
+                if hasValidLocation {
+                    Button {
+                        dscrFocused = false
+                        Task {
+                            await viewModel.search()
+                            if viewModel.errorMessage == nil {
+                                try? await Task.sleep(nanoseconds: 100_000_000)
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                    resultsAppeared = true
+                                }
+                            }
+                        }
+                    } label: {
+                        Text("Find Investments")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.primary)
+                            .foregroundStyle(colorScheme == .dark ? .black : .white)
+                            .clipShape(Capsule())
+                    }
+                    .padding(.top, 8)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    ))
+                }
+            }
+            
+            // Property Type Selector
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(PropertyType.allCases, id: \.self) { type in
+                        let isSelected = viewModel.criteria.propertyType == type
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if isSelected {
+                                    viewModel.criteria.propertyType = nil
+                                } else {
+                                    viewModel.criteria.propertyType = type
+                                }
+                            }
+                            HapticManager.shared.selection()
+                        } label: {
+                            Text(type.displayName)
+                                .font(.subheadline)
+                                .fontWeight(isSelected ? .semibold : .regular)
+                                .foregroundStyle(isSelected ? (colorScheme == .dark ? .black : .white) : .primary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(isSelected ? Color.primary : Color(.systemGray6))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, -20)
+            .contentMargins(.horizontal, 20, for: .scrollContent)
             
             // Edit/Hide filters toggle
             Button {
@@ -165,6 +230,8 @@ struct InvestmentSearchView: View {
                 HapticManager.shared.selection()
             } label: {
                 HStack(spacing: 4) {
+                    Image(systemName: "pencil")
+                        .font(.caption)
                     Text(isFiltersExpanded ? "Hide filters" : "Edit filters")
                         .font(.subheadline)
                     
@@ -186,36 +253,11 @@ struct InvestmentSearchView: View {
                 expandedFiltersContent
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            
-            // Search button
-            Button {
-                dscrFocused = false
-                Task {
-                    await viewModel.search()
-                    if viewModel.errorMessage == nil {
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                            resultsAppeared = true
-                        }
-                    }
-                }
-            } label: {
-                Text("Find Investments")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(hasValidLocation ? Color.primary : Color.clear)
-                    .foregroundStyle(hasValidLocation ? (colorScheme == .dark ? .black : .white) : .primary)
-                    .clipShape(Capsule())
-                    .overlay {
-                        if !hasValidLocation {
-                            Capsule()
-                                .stroke(Color.primary.opacity(0.3), lineWidth: 1.5)
-                        }
-                    }
-            }
-            .disabled(!hasValidLocation)
         }
+        .padding(16)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .animation(.easeInOut(duration: 0.3), value: hasValidLocation)
     }
     
     private var expandedFiltersContent: some View {
@@ -380,7 +422,7 @@ struct InvestmentSearchView: View {
         
         return VStack(alignment: .leading, spacing: 16) {
             // Header with location and count
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text("\(results.count)")
                     .font(.system(size: 42, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
@@ -477,7 +519,7 @@ struct InvestmentSearchView: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 ForEach(viewModel.history) { item in
                     Button {
                         viewModel.applyHistory(item)
@@ -512,15 +554,14 @@ struct InvestmentSearchView: View {
                             Text(item.searchedAt.relativeFormat)
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            
+
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(.tertiary)
                         }
-                        .padding(14)
-                        .background(cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 16)
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
@@ -531,6 +572,11 @@ struct InvestmentSearchView: View {
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
+                    }
+
+                    if item.id != viewModel.history.last?.id {
+                        Divider()
+                            .padding(.leading, 16)
                     }
                 }
             }
@@ -602,13 +648,21 @@ struct InvestmentSearchView: View {
 // MARK: - Location Search Field
 
 /// Location search field with MapKit autocomplete for city/state/ZIP searches
-struct LocationSearchField: View {
+/// Location search field with MapKit autocomplete for city/state/ZIP searches
+struct LocationSearchField<Footer: View>: View {
     let title: String
     @Binding var selectedLocation: String
+    @ViewBuilder let footer: Footer
     
     @State private var searchCompleter = LocationSearchCompleter()
     @State private var showSuggestions: Bool = false
     @FocusState private var isFocused: Bool
+    
+    init(title: String, selectedLocation: Binding<String>, @ViewBuilder footer: () -> Footer) {
+        self.title = title
+        self._selectedLocation = selectedLocation
+        self.footer = footer()
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -704,6 +758,8 @@ struct LocationSearchField: View {
                 .padding(.top, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            
+            footer
         }
         .animation(.easeInOut(duration: 0.2), value: showSuggestions)
         .animation(.easeInOut(duration: 0.2), value: searchCompleter.suggestions.count)

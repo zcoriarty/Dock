@@ -7,6 +7,8 @@
 
 import Foundation
 
+
+
 struct InvestmentSearchCriteria: Hashable, Sendable, Codable {
     var location: String
     var minPrice: Double
@@ -39,6 +41,7 @@ struct InvestmentSearchCriteria: Hashable, Sendable, Codable {
     var limit: Int
     var pastDays: Int
     var listingType: ListingType
+    var propertyType: PropertyType?
     
     /// Compact summary of key filters (excluding location)
     var filterSummary: String {
@@ -105,7 +108,8 @@ struct InvestmentSearchCriteria: Hashable, Sendable, Codable {
             rentSensitivity: 0,
             limit: 50,
             pastDays: 0,
-            listingType: .forSale
+            listingType: .forSale,
+            propertyType: nil
         )
     }
 }
